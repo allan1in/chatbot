@@ -1,36 +1,71 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Chatbot
 
-## Getting Started
+一个基于 Next.js + AI SDK + OpenRouter 的简易聊天机器人项目。
 
-First, run the development server:
+## 功能
+
+- 基础聊天界面（用户消息 / AI 消息）
+- 流式返回模型输出
+- 主题切换（深色/浅色）
+- 基于 App Router 的 API 路由
+
+## 技术栈
+
+- Next.js 16
+- React 19
+- TypeScript
+- AI SDK（`ai` / `@ai-sdk/react`）
+- OpenRouter Provider（`@openrouter/ai-sdk-provider`）
+- Tailwind CSS 4 + shadcn/ui
+
+## 快速开始
+
+1. 安装依赖
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. 配置环境变量（在项目根目录创建 `.env`）
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```env
+OPENROUTER_API_KEY=你的_openrouter_api_key
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+3. 启动开发环境
 
-## Learn More
+```bash
+pnpm dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+4. 打开浏览器访问
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```text
+http://localhost:3000
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 可用命令
 
-## Deploy on Vercel
+```bash
+pnpm dev    # 启动开发服务
+pnpm build  # 构建生产版本
+pnpm start  # 启动生产服务
+pnpm lint   # 运行 ESLint
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 目录结构（简要）
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```text
+app/
+	(chat)/
+		page.tsx              # 聊天页面
+		api/chat/route.ts     # 聊天 API（调用 OpenRouter）
+components/               # UI 组件
+lib/                      # 工具函数
+```
+
+## 说明
+
+- 当前模型在 `app/(chat)/api/chat/route.ts` 中配置为：
+	`bytedance-seed/seed-1.6-flash`
+- 可按需替换为你在 OpenRouter 可用的其他模型。
