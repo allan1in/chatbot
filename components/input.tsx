@@ -8,16 +8,14 @@ import { ArrowUpIcon } from "lucide-react";
 export function Input({
   className,
   onSend,
-  disabled = false,
 }: {
   className?: string;
   onSend: (text: string) => void;
-  disabled?: boolean;
 }) {
   const [value, setValue] = useState("");
 
   const handleSend = () => {
-    if (!value.trim() || disabled) {
+    if (!value.trim()) {
       return;
     }
     onSend(value.trim());
@@ -28,6 +26,7 @@ export function Input({
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
+      // 防止在按下 Enter 键时触发换行
       e.preventDefault();
       handleSend();
     }
@@ -36,7 +35,7 @@ export function Input({
   return (
     <div
       className={cn(
-        "w-full border border-border focus-within:border-ring rounded-[var(--radius-2xl)] p-4 flex flex-col justify-between gap-2 bg-background",
+        "border border-border focus-within:border-foreground rounded-2xl p-4 flex flex-col justify-between gap-2 bg-background",
         className
       )}
     >
@@ -52,7 +51,6 @@ export function Input({
           onClick={handleSend}
           size="icon-lg"
           className="rounded-full"
-          disabled={disabled}
         >
           <ArrowUpIcon />
         </Button>

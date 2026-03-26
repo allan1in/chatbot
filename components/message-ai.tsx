@@ -1,4 +1,4 @@
-import { CopyToggle } from "./copy-toggle";
+
 import { cn } from "@/lib/utils";
 
 export function MessageAI({
@@ -19,7 +19,6 @@ export function MessageAI({
         <div className="py-2 rounded-[var(--radius-lg)] leading-7 min-h-10 max-w-full whitespace-pre-wrap break-all flex items-center text-foreground">
           {message}
         </div>
-        {message && <CopyToggle text={message} align="left" />}
       </div>
     </div>
   );

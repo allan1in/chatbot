@@ -1,4 +1,3 @@
-import { CopyToggle } from "./copy-toggle";
 import { cn } from "@/lib/utils";
 
 export function MessageUser({
@@ -16,7 +15,6 @@ export function MessageUser({
         <div className="bg-primary text-primary-foreground py-2 px-4 rounded-[var(--radius-lg)] leading-7 min-h-10 max-w-full whitespace-pre-wrap break-all flex items-center">
           {message}
         </div>
-        {message && <CopyToggle text={message} align="right" />}
       </div>
     </div>
   );
