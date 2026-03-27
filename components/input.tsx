@@ -35,7 +35,7 @@ export function Input({
   return (
     <div
       className={cn(
-        "border border-border focus-within:border-foreground rounded-2xl p-4 flex flex-col justify-between gap-2 bg-background",
+        "border border-border focus-within:border-ring rounded-2xl p-4 flex flex-col justify-between gap-2 bg-background",
         className
       )}
     >

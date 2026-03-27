@@ -12,14 +12,14 @@ import { useEffect, useState } from "react";
 export default function Home() {
   const { messages, sendMessage, status, error } = useChat();
 
+  const handleSend = (inputText: string) => {
+    sendMessage({ text: inputText });
+  };
+
   // 存储计算出的最小高度
   const [lastAiMinHeight, setLastAiMinHeight] = useState<number | undefined>(
     undefined,
   );
-
-  const handleSend = (inputText: string) => {
-    sendMessage({ text: inputText });
-  };
 
   const lastMessage = messages[messages.length - 1];
   const lastMessageIsAI = lastMessage?.role === "assistant";
