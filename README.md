@@ -1,6 +1,9 @@
 # Chatbot
 
-一个基于 Next.js + AI SDK + OpenRouter 的简易聊天机器人项目。
+一个基于 Next.js + AI SDK + OpenRouter 的简易聊天机器人。
+
+<img width="2560" height="1271" alt="image" src="https://github.com/user-attachments/assets/2d4bb38b-940a-4b9b-8745-77ab5d20949b" />
+
 
 ## 功能
 
