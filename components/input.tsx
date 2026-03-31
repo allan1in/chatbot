@@ -50,7 +50,7 @@ export function Input({
         <Button
           onClick={handleSend}
           size="icon-lg"
-          className="rounded-full"
+          className="rounded-full cursor-pointer"
         >
           <ArrowUpIcon />
         </Button>
