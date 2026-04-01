@@ -19,7 +19,7 @@ export function MessageUser({
         {message}
       </div>
       <div className="flex items-center justify-end">
-        <ToggleCopy iconA="copy" iconB="check" tooltip="复制" autoResetDelay={3000}/>
+        <ToggleCopy iconA="copy" iconB="check" tooltip="复制" autoResetDelay={3000} content={message} />
       </div>
     </div>
   );

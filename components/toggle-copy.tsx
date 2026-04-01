@@ -19,8 +19,8 @@ type ToggleCopyProps = Omit<
 > & {
   iconA: IconName;
   iconB: IconName;
+  content?: string;
   side?: "top" | "right" | "bottom" | "left";
-  onChange?: (isA: boolean) => void;
   tooltip?: string;
   autoResetDelay?: number;
 };
@@ -28,7 +28,7 @@ type ToggleCopyProps = Omit<
 export function ToggleCopy({
   iconA,
   iconB,
-  onChange,
+  content,
   tooltip,
   side = "bottom",
   autoResetDelay,
@@ -38,23 +38,23 @@ export function ToggleCopy({
   const [isA, setIsA] = useState(true);
   const autoResetRef = useRef<NodeJS.Timeout | undefined>(undefined);
 
-  const handleToggle = () => {
-    if (autoResetDelay && !isA) {
-      return;
-    }
+  const handleToggle = async () => {
+    if (!content) return;
 
-    const nextState = !isA;
-    setIsA(nextState);
-    onChange?.(nextState);
+    try {
+      await navigator.clipboard.writeText(content);
+      setIsA(false);
 
-    if (autoResetDelay) {
-      if (autoResetRef.current) {
-        clearTimeout(autoResetRef.current);
+      if (autoResetDelay) {
+        if (autoResetRef.current) {
+          clearTimeout(autoResetRef.current);
+        }
+        autoResetRef.current = setTimeout(() => {
+          setIsA(true);
+        }, autoResetDelay);
       }
-      autoResetRef.current = setTimeout(() => {
-        setIsA(true);
-        onChange?.(true);
-      }, autoResetDelay);
+    } catch (err) {
+      console.error("Failed to copy:", err);
     }
   };
 

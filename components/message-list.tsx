@@ -55,7 +55,7 @@ export default function MessageList({
 
   useEffect(() => {
     if (groups.length > 0) {
-      lastGroupRef.current?.scrollIntoView({ 
+      lastGroupRef.current?.scrollIntoView({
         behavior: "smooth", 
         block: "start"
       });
@@ -65,11 +65,11 @@ export default function MessageList({
   return (
     <div
       className={cn(
-        "flex flex-col scrollbar-thin w-full items-center [scrollbar-gutter:stable] pl-2",
+        "flex flex-col scrollbar-thin w-full items-center [scrollbar-gutter:stable] pl-4 pr-2",
         className,
       )}
     >
-      <div className="max-w-3xl w-full flex flex-col gap-4">
+      <div className="max-w-3xl w-full flex flex-col px-4">
         {groups.map((group, index) => {
           const isLast = index === groups.length - 1;
 
