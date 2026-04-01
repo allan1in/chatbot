@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 
 type IconName = (typeof iconNames)[number];
 
-type ToggleProps = Omit<
+type ToggleCopyProps = Omit<
   React.ComponentProps<typeof Button>,
   "children" | "onClick" | "onChange"
 > & {
@@ -25,7 +25,7 @@ type ToggleProps = Omit<
   autoResetDelay?: number;
 };
 
-export function Toggle({
+export function ToggleCopy({
   iconA,
   iconB,
   onChange,
@@ -34,10 +34,9 @@ export function Toggle({
   autoResetDelay,
   className,
   ...buttonProps
-}: ToggleProps) {
+}: ToggleCopyProps) {
   const [isA, setIsA] = useState(true);
   const autoResetRef = useRef<NodeJS.Timeout | undefined>(undefined);
-  const iconName = isA ? iconA : iconB;
 
   const handleToggle = () => {
     if (autoResetDelay && !isA) {
@@ -76,10 +75,23 @@ export function Toggle({
         aria-pressed={isA}
         aria-label="toggle"
         onClick={handleToggle}
-        className={cn("cursor-pointer", className)}
+        className={cn("cursor-pointer relative", className)}
         {...buttonProps}
       >
-        <DynamicIcon name={iconName} className="size-4" />
+        <DynamicIcon
+          name={iconA}
+          className={cn(
+            "size-4 absolute transition-all",
+            isA ? "scale-100 rotate-0" : "scale-0 rotate-90"
+          )}
+        />
+        <DynamicIcon
+          name={iconB}
+          className={cn(
+            "size-4 absolute transition-all",
+            isA ? "scale-0 -rotate-90" : "scale-100 rotate-0"
+          )}
+        />
       </Button>
     </div>
   );

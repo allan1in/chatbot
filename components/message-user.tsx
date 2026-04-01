@@ -1,5 +1,5 @@
 import { cn } from "@/lib/utils";
-import { Toggle } from "./toggle";
+import { ToggleCopy } from "./toggle-copy";
 
 export function MessageUser({
   className,
@@ -19,7 +19,7 @@ export function MessageUser({
         {message}
       </div>
       <div className="flex items-center justify-end">
-        <Toggle iconA="copy" iconB="check" tooltip="复制" autoResetDelay={3000}/>
+        <ToggleCopy iconA="copy" iconB="check" tooltip="复制" autoResetDelay={3000}/>
       </div>
     </div>
   );
