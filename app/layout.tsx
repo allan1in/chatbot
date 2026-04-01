@@ -25,6 +25,7 @@ export default function RootLayout({
           defaultTheme="system"
           enableSystem
           storageKey="theme-preference"
+          disableTransitionOnChange
         >
           <TooltipProvider>
             {children}

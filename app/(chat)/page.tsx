@@ -18,7 +18,7 @@ export default function Home() {
       <Navbar />
       <main className="flex flex-col items-center justify-start min-h-dvh pt-14">
           <MessageList className="h-[calc(100dvh-17rem)] overflow-auto" messages={messages} status={status} error={error} />
-          <Input className="w-[calc(100%-2rem)] max-w-3xl" onSend={handleSend} />
+          <Input className="w-[calc(100%-2rem)] max-w-3xl" onSend={handleSend} disabled={status !== "ready" && status !== "error"} />
       </main>
     </div>
   );

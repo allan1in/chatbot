@@ -8,9 +8,11 @@ import { ArrowUpIcon } from "lucide-react";
 export function Input({
   className,
   onSend,
+  disabled,
 }: {
   className?: string;
   onSend: (text: string) => void;
+  disabled?: boolean;
 }) {
   const [value, setValue] = useState("");
 
@@ -25,7 +27,7 @@ export function Input({
   const textareaPlaceholder = "想聊些什么呢？";
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (!disabled && e.key === "Enter" && !e.shiftKey) {
       // 防止在按下 Enter 键时触发换行
       e.preventDefault();
       handleSend();
@@ -51,6 +53,7 @@ export function Input({
           onClick={handleSend}
           size="icon-lg"
           className="rounded-full cursor-pointer"
+          disabled={disabled}
         >
           <ArrowUpIcon />
         </Button>
