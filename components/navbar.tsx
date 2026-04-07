@@ -1,13 +1,26 @@
 "use client";
 
 import { ButtonTheme } from "./button-theme";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
-export function Navbar() {
+interface NavbarProps {
+  title?: string;
+}
+
+export function Navbar({ title = "Chatbot" }: NavbarProps) {
   return (
-    <nav className="fixed top-0 right-0 bg-background w-full h-14 flex items-center justify-between">
-      <span className="text-foreground px-4">Chatbot</span>
-      <div className="px-4">
-        <ButtonTheme />
+    <nav className="bg-background w-full h-14">
+      <div className="grid h-full w-full grid-cols-[auto_1fr_auto] items-center px-4">
+        <SidebarTrigger className="h-8 w-8 cursor-pointer" />
+        <h1
+          className="justify-self-center text-foreground"
+          title={title}
+        >
+          {title}
+        </h1>
+        <div className="justify-self-end">
+          <ButtonTheme />
+        </div>
       </div>
     </nav>
   );

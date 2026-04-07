@@ -19,11 +19,13 @@ export default function MessageList({
   status,
   error,
   className,
+  loading,
 }: {
   messages: UIMessage<unknown, UIDataTypes, UITools>[];
   status: string;
   error: Error | undefined;
   className?: string;
+  loading?: boolean;
 }) {
   const groups = messages.reduce<ChatGroup[]>((acc, message) => {
     if (message.role === "user") {
@@ -70,6 +72,12 @@ export default function MessageList({
       )}
     >
       <div className="max-w-3xl w-full flex flex-col px-4">
+        {loading && (
+          <div className="flex min-h-[calc(100dvh-17rem)] items-center justify-center">
+            <LoadingDots />
+          </div>
+        )}
+
         {groups.map((group, index) => {
           const isLast = index === groups.length - 1;
 
