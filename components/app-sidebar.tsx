@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
+  HistoryIcon,
   PlusIcon,
 } from "lucide-react";
 
@@ -16,6 +17,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
+import { LoadingDots } from "@/components/loading-dots";
 import { cn } from "@/lib/utils";
 
 type ChatItem = {
@@ -24,6 +26,7 @@ type ChatItem = {
 };
 
 export function AppSidebar() {
+  const [isLoadingChats, setIsLoadingChats] = useState(true);
   const [chats, setChats] = useState<ChatItem[]>([]);
 
   useEffect(() => {
@@ -38,6 +41,8 @@ export function AppSidebar() {
         setChats(data);
       } catch (error) {
         console.error("Failed to fetch chats", error);
+      } finally {
+        setIsLoadingChats(false);
       }
     }
 
@@ -45,7 +50,7 @@ export function AppSidebar() {
   }, []);
 
   return (
-    <Sidebar className="h-dvh">
+    <Sidebar className="h-dvh" >
       <SidebarContent className="flex h-full flex-col">
         <div className="border-b border-sidebar-border p-2">
           <SidebarMenu>
@@ -59,20 +64,35 @@ export function AppSidebar() {
         </div>
 
         <SidebarGroup className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <SidebarGroupLabel className="text-sm h-10 p-2">所有对话</SidebarGroupLabel>
+          <SidebarGroupLabel className="text-sm h-10 p-2 flex items-center gap-2">
+            <HistoryIcon className="size-4" />
+            <span>对话</span>
+          </SidebarGroupLabel>
           <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto">
-            <SidebarMenu>
-              {chats.map((item) => (
-                <SidebarMenuItem key={item.id}>
-                  <SidebarMenuButton
-                    render={<Link href={`/${item.id}`} />}
-                    className={cn("w-full h-10")}
+            {isLoadingChats ? (
+              <div className="flex h-full min-h-24 items-center justify-center px-3 text-sidebar-foreground/70">
+                <LoadingDots className="text-sidebar-foreground/70" />
+              </div>
+            ) : (
+              <SidebarMenu>
+                {chats.map((item, index) => (
+                  <SidebarMenuItem 
+                    key={item.id}
+                    style={{
+                      animation: `slide-in-left 0.4s ease-out ${index * 50}ms forwards`,
+                      opacity: 0,
+                    }}
                   >
-                    <span className="text-xl">{item.title}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
+                    <SidebarMenuButton
+                      render={<Link href={`/${item.id}`} />}
+                      className={cn("w-full h-10")}
+                    >
+                      <span className="text-sm">{item.title}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            )}
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>

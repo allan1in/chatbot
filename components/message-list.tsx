@@ -71,7 +71,7 @@ export default function MessageList({
         className,
       )}
     >
-      <div className="max-w-3xl w-full flex flex-col px-4">
+      <div className="max-w-3xl w-full flex flex-col px-4 pt-4">
         {loading && (
           <div className="flex min-h-[calc(100dvh-17rem)] items-center justify-center">
             <LoadingDots />
@@ -87,7 +87,7 @@ export default function MessageList({
               ref={isLast ? lastGroupRef : null}
               className={cn(
                 "flex flex-col gap-4",
-                isLast && "min-h-[calc(100dvh-17rem)]"
+                isLast && "min-h-[calc(100dvh-18rem)]"
               )}
             >
               {group.user?.parts.map((part, i) =>
