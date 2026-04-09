@@ -10,7 +10,7 @@ interface NavbarProps {
 }
 
 export function Navbar({ title, isTitleLoading = false }: NavbarProps) {
-  const displayTitle = title?.trim() ? title : "新对话";
+  const displayTitle = title?.trim() ? title : "";
 
   return (
     <nav className="bg-background w-full h-14">

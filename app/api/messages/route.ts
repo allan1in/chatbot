@@ -37,8 +37,7 @@ export async function POST(req: Request) {
             where: { id: chatId },
             update: { updatedAt: new Date() },
             create: {
-              id: chatId,
-              title: userContent.substring(0, 20) || "新对话",
+              id: chatId
             }
           });
 

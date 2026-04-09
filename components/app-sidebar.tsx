@@ -1,11 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import {
-  HistoryIcon,
-  PlusIcon,
-} from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { Ellipsis, HistoryIcon, PlusIcon, Trash } from "lucide-react";
 
 import {
   Sidebar,
@@ -14,48 +11,58 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarMenu,
+  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { LoadingDots } from "@/components/loading-dots";
 import { cn } from "@/lib/utils";
-
-type ChatItem = {
-  id: string;
-  title: string;
-};
+import { useChatList } from "@/app/contexts/chat-list-context";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu";
 
 export function AppSidebar() {
-  const [isLoadingChats, setIsLoadingChats] = useState(true);
-  const [chats, setChats] = useState<ChatItem[]>([]);
+  const { chats, isLoadingChats, removeChat } = useChatList();
+  const pathname = usePathname();
+  const router = useRouter();
+  const { isMobile } = useSidebar();
 
-  useEffect(() => {
-    async function fetchChats() {
-      try {
-        const response = await fetch("/api/chats");
-        if (!response.ok) {
-          return;
-        }
+  async function handleDeleteChat(chatId: string) {
+    try {
+      const response = await fetch(`/api/chats?id=${chatId}`, {
+        method: "DELETE",
+      });
 
-        const data: ChatItem[] = await response.json();
-        setChats(data);
-      } catch (error) {
-        console.error("Failed to fetch chats", error);
-      } finally {
-        setIsLoadingChats(false);
+      if (!response.ok) {
+        return;
       }
-    }
 
-    fetchChats();
-  }, []);
+      removeChat(chatId);
+
+      if (pathname === `/${chatId}`) {
+        router.push("/");
+      }
+    } catch (error) {
+      console.error("Failed to delete chat", error);
+    }
+  }
 
   return (
-    <Sidebar className="h-dvh" >
+    <Sidebar className="h-dvh">
       <SidebarContent className="flex h-full flex-col">
         <div className="border-b border-sidebar-border p-2">
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton className="h-10" render={<Link href="/" />}>
+              <SidebarMenuButton
+                size="lg"
+                isActive={pathname === "/"}
+                render={<Link href="/" />}
+              >
                 <PlusIcon />
                 <span>新对话</span>
               </SidebarMenuButton>
@@ -68,7 +75,7 @@ export function AppSidebar() {
             <HistoryIcon className="size-4" />
             <span>对话</span>
           </SidebarGroupLabel>
-          <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto">
+          <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
             {isLoadingChats ? (
               <div className="flex h-full min-h-24 items-center justify-center px-3 text-sidebar-foreground/70">
                 <LoadingDots className="text-sidebar-foreground/70" />
@@ -76,19 +83,47 @@ export function AppSidebar() {
             ) : (
               <SidebarMenu>
                 {chats.map((item, index) => (
-                  <SidebarMenuItem 
+                  <SidebarMenuItem
                     key={item.id}
-                    style={{
-                      animation: `slide-in-left 0.4s ease-out ${index * 50}ms forwards`,
-                      opacity: 0,
-                    }}
+                    className={cn(
+                      "opacity-0 animate-[slide-in-left_0.4s_ease-out_forwards]",
+                      `[animation-delay:${index * 10}ms]`,
+                    )}
                   >
                     <SidebarMenuButton
+                      isActive={pathname === `/${item.id}`}
+                      size="lg"
                       render={<Link href={`/${item.id}`} />}
-                      className={cn("w-full h-10")}
                     >
                       <span className="text-sm">{item.title}</span>
                     </SidebarMenuButton>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <SidebarMenuAction
+                            showOnHover
+                            className="rounded-sm data-[state=open]:bg-accent cursor-pointer"
+                          />
+                        }
+                      >
+                        <Ellipsis />
+                        <span className="sr-only">More</span>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        className="w-24 rounded-lg"
+                        side={isMobile ? "bottom" : "right"}
+                        align={isMobile ? "end" : "start"}
+                      >
+                        <DropdownMenuItem
+                          className="cursor-pointer"
+                          variant="destructive"
+                          onClick={() => handleDeleteChat(item.id)}
+                        >
+                          <Trash />
+                          <span>删除</span>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </SidebarMenuItem>
                 ))}
               </SidebarMenu>

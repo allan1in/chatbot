@@ -1,21 +1,23 @@
 "use client";
 
 import { useChat } from "@ai-sdk/react";
-import type { UIMessage } from "ai";
-import { use, useEffect, useState } from "react";
+import { DefaultChatTransport, type UIMessage } from "ai";
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 
 import { Input } from "@/components/input";
 import MessageList from "@/components/message-list";
 import { Navbar } from "@/components/navbar";
+import { useChatList } from "@/app/contexts/chat-list-context";
 
 type Params = {
   id?: string[];
 };
 
-export default function Home({ params }: { params: Promise<Params> }) {
-  // 用 use 来获取路由参数，因为它是一个异步操作，可能会导致组件在获取参数之前就渲染
-  const { id } = use(params);
+export default function Home() {
+  const { id } = useParams<Params>();
   const routeChatId = id?.[0];
+  const { addChat, updateChat } = useChatList();
 
   // 生成一个新的 chatId，除非路由中已经有了 chatId
   // 用 useState 来保持 chatId 的稳定性，避免在组件重新渲染时生成新的 chatId
@@ -34,13 +36,16 @@ export default function Home({ params }: { params: Promise<Params> }) {
   const [chatTitle, setChatTitle] = useState("");
 
   const { messages, sendMessage, status, error, setMessages } = useChat({
+    transport: new DefaultChatTransport({
+      api: "/api/messages",
+    }),
     id: chatId,
   });
 
   useEffect(() => {
     async function fetchMessages() {
       try {
-        const res = await fetch(`/api/chat?id=${chatId}`);
+        const res = await fetch(`/api/messages?id=${chatId}`);
         if (res.ok) {
           const data: {
             title: string;
@@ -79,11 +84,38 @@ export default function Home({ params }: { params: Promise<Params> }) {
     fetchMessages();
   }, [chatId, routeChatId, setMessages]);
 
-  const handleSend = (inputText: string) => {
+  const handleSend = async (inputText: string) => {
     if (!routeChatId) {
+      let generatedTitle = "新对话";
+
+      try {
+        const titleRes = await fetch("/api/title", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            message: inputText,
+            chatId,
+          }),
+        });
+
+        if (titleRes.ok) {
+          const data: { title?: string } = await titleRes.json();
+          generatedTitle = data.title?.trim() || "新对话";
+        }
+      } catch (titleError) {
+        console.error("Failed to generate title", titleError);
+      }
+
+      setChatTitle(generatedTitle);
+      addChat({ id: chatId, title: generatedTitle });
+      updateChat(chatId, { title: generatedTitle });
+
       // 原生 JS 修改，完全不触发 React 重绘，只改地址栏
-      window.history.pushState({}, "", `/${chatId}`);
+      window.history.replaceState({}, "", `/${chatId}`);
     }
+
     sendMessage({ text: inputText }, { body: { chatId } });
   };
 

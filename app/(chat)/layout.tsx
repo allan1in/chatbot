@@ -1,6 +1,7 @@
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { cookies } from "next/headers";
+import { ChatProvider } from "../contexts/chat-list-context";
 
 export default async function ChatLayout({
   children,
@@ -12,10 +13,14 @@ export default async function ChatLayout({
 
   return (
     <SidebarProvider defaultOpen={defaultOpen}>
-      <div className="flex h-dvh w-full">
-        <AppSidebar />
-        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">{children}</div>
-      </div>
+      <ChatProvider>
+        <div className="flex h-dvh w-full">
+          <AppSidebar />
+          <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
+            {children}
+          </div>
+        </div>
+      </ChatProvider>
     </SidebarProvider>
   );
 }
