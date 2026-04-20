@@ -2,7 +2,7 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { useTransition, useState } from "react";
+import { useTransition, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import { Input } from "@/components/input";
@@ -24,6 +24,7 @@ export default function NewChat() {
   );
 
   const [chatTitle, setChatTitle] = useState("");
+  const [shouldNavigate, setShouldNavigate] = useState(false);
 
   const { messages, sendMessage, status, error } = useChat({
     transport: new DefaultChatTransport({
@@ -32,12 +33,28 @@ export default function NewChat() {
     id: chatId,
   });
 
+  // 监听消息流完成，准备存到 Context 和路由
+  useEffect(() => {
+    if (shouldNavigate && status === "ready" && messages.length > 0) {
+      // ✅ 这时 messages 是最新的完整消息
+      setPendingMessages(chatId, messages);
+      
+      startTransition(() => {
+        router.push(`/${chatId}`);
+      });
+      
+      setShouldNavigate(false);
+    }
+  }, [shouldNavigate, status, messages, chatId, setPendingMessages, router]);
+
   const handleSend = async (inputText: string) => {
-    // 立刻发送消息，不阻塞
+    // 立刻添加到聊天列表
     addChat({ id: chatId, title: "新对话" });
+    
+    // 发送消息（开始流式传输）
     sendMessage({ text: inputText }, { body: { chatId } });
 
-    // 后台生成标题，不阻塞路由
+    // 后台生成标题，不阻塞
     fetch("/api/title", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -51,19 +68,8 @@ export default function NewChat() {
       })
       .catch((err) => console.error("Failed to generate title", err));
 
-    // 等待消息流完成后，存到 Context 并路由
-    const checkAndNavigate = setInterval(() => {
-      if (status !== "streaming" && status !== "submitted") {
-        clearInterval(checkAndNavigate);
-        
-        // 乐观更新：把当前消息存到 Context，Chat[id] 页面立刻读取
-        setPendingMessages(chatId, messages);
-        
-        startTransition(() => {
-          router.push(`/${chatId}`);
-        });
-      }
-    }, 100);
+    // 标记需要导航，useEffect 会监听消息完成后自动路由
+    setShouldNavigate(true);
   };
 
   return (

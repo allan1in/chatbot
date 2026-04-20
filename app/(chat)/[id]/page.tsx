@@ -30,15 +30,16 @@ export default function Chat() {
   useEffect(() => {
     async function fetchMessages() {
       try {
-        // 优先检查是否有 Context 中的待处理消息（乐观更新）
+        // 优先检查 Context 中是否有待处理的消息（来自 NewChat 页面）
         const hasPendingMessages = pendingMessages[chatId]?.length > 0;
         
         if (hasPendingMessages) {
-          // 立刻使用 Context 中的消息，无闪烁
+          // ✅ 立刻从 Context 恢复消息，无闪烁无丢失
           setMessages(pendingMessages[chatId]);
           clearPendingMessages(chatId);
+          setLoading(false);
           
-          // 后台验证消息是否真的保存了
+          // 后台从 API 获取消息，验证数据一致性
           const res = await fetch(`/api/messages?id=${chatId}`);
           if (res.ok) {
             const data: {
@@ -52,7 +53,8 @@ export default function Chat() {
             } = await res.json();
 
             setChatTitle(data.title || "新对话");
-
+            
+            // 如果 API 返回的数据与 Context 不同，更新为 API 版本（保证服务端一致性）
             const formattedMessages: UIMessage[] = data.messages.map((msg) => ({
               id: msg.id,
               role: msg.role,
@@ -61,13 +63,13 @@ export default function Chat() {
               createdAt: new Date(msg.createdAt),
             }));
 
-            // API 返回的消息与 Context 不同时，用 API 的覆盖
+            // 只有当消息不一致时才更新（避免不必要的 re-render）
             if (JSON.stringify(formattedMessages) !== JSON.stringify(pendingMessages[chatId])) {
               setMessages(formattedMessages);
             }
           }
         } else {
-          // 没有 Context 消息，直接从 API 获取
+          // 没有 Context 消息（例如页面刷新），直接从 API 获取
           const res = await fetch(`/api/messages?id=${chatId}`);
           if (res.ok) {
             const data: {
@@ -90,7 +92,7 @@ export default function Chat() {
               createdAt: new Date(msg.createdAt),
             }));
 
-            // 只在消息列表为空且不在流式传输中时才设置消息
+            // 只在消息列表为空时才设置
             if (messages.length === 0 && status !== "streaming" && status !== "submitted") {
               setMessages(formattedMessages);
             }
