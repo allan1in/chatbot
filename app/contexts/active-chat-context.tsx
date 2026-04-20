@@ -7,7 +7,6 @@ import {
   createContext,
   useContext,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -28,48 +27,53 @@ const ActiveChatContext = createContext<ActiveChatContextValue | null>(null);
 
 export function ActiveChatProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const [currentPathname, setCurrentPathname] = useState(pathname);
-
-  // 监听 popstate 事件（浏览器回退/前进）
-  useEffect(() => {
-    const handlePopState = () => {
-      setCurrentPathname(window.location.pathname);
-    };
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
-
-  // 也要监听 pathname 变化（初始加载）
-  useEffect(() => {
-    setCurrentPathname(pathname);
-  }, [pathname]);
   
-  // 从 pathname 提取 chatId
-  // / -> 新对话（chatId 为空）
-  // /abc123 -> 旧对话（chatId = "abc123"）
-  const pathSegments = currentPathname.split("/").filter(Boolean);
-  const chatIdFromUrl = pathSegments.length > 0 ? pathSegments[0] : "";
-  const isNewChat = !chatIdFromUrl;
-
-  // 为新对话生成一个临时 chatId，用 useMemo 确保只生成一次
-  const chatId = useMemo(() => {
-    if (chatIdFromUrl) {
-      return chatIdFromUrl;
-    }
-    // 新对话时，生成临时 id，一直保持直到用户发送消息
-    return typeof crypto !== "undefined" && crypto.randomUUID
-      ? crypto.randomUUID()
-      : Math.random().toString(36).substring(2, 15);
-  }, [chatIdFromUrl]);
-
   // 状态
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
   const [chatTitle, setChatTitle] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [renderKey, setRenderKey] = useState(0); // 用来触发重新渲染
   
   const loadedChatIdsRef = useRef(new Set<string>());
+  const pathnameRef = useRef(pathname);
+  const chatIdRef = useRef("");
 
-  // 当 chatId 或 isNewChat 变化时，从 API 加载历史消息
+  // 监听 popstate 和 pathname 变化
+  useEffect(() => {
+    const handlePopState = () => {
+      pathnameRef.current = window.location.pathname;
+      setRenderKey((k) => k + 1); // 触发重新渲染
+    };
+    
+    window.addEventListener("popstate", handlePopState);
+    
+    // pathname 变化时也要更新
+    if (pathname !== pathnameRef.current) {
+      pathnameRef.current = pathname;
+      setRenderKey((k) => k + 1);
+    }
+    
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [pathname]);
+
+  // 从 pathname 提取 chatId（稳定的，不会无限变化）
+  const pathSegments = pathnameRef.current.split("/").filter(Boolean);
+  const chatIdFromUrl = pathSegments.length > 0 ? pathSegments[0] : "";
+  const isNewChat = !chatIdFromUrl;
+
+  // 为新对话生成一个临时 chatId
+  if (!chatIdRef.current) {
+    chatIdRef.current = chatIdFromUrl || (typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : Math.random().toString(36).substring(2, 15));
+  } else if (chatIdFromUrl && chatIdFromUrl !== chatIdRef.current) {
+    // URL 中有 chatId，说明切换到了旧对话
+    chatIdRef.current = chatIdFromUrl;
+  }
+
+  const chatId = chatIdRef.current;
+
+  // 当 chatId 变化时，从 API 加载历史消息
   useEffect(() => {
     if (isNewChat) {
       // 新对话，清空消息和标题
