@@ -44,10 +44,10 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
   }, [pathname]);
   
   // 从 pathname 提取 chatId
-  // /app -> 新对话（chatId 为空）
-  // /app/abc123 -> 旧对话（chatId = "abc123"）
+  // / -> 新对话（chatId 为空）
+  // /abc123 -> 旧对话（chatId = "abc123"）
   const pathSegments = currentPathname.split("/").filter(Boolean);
-  const chatIdFromUrl = pathSegments.length > 1 ? pathSegments[1] : "";
+  const chatIdFromUrl = pathSegments.length > 0 ? pathSegments[0] : "";
   const isNewChat = !chatIdFromUrl;
 
   // 为新对话生成一个临时 chatId

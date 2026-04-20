@@ -24,36 +24,35 @@ export default function ChatPage() {
   } = useActiveChat();
 
   const handleSend = async (inputText: string) => {
-    // 1. 生成新 chatId（如果是新对话）
-    const newChatId =
-      typeof crypto !== "undefined" && crypto.randomUUID
-        ? crypto.randomUUID()
-        : Math.random().toString(36).substring(2, 15);
+    // 1. 如果是新对话，用当前的 chatId，立刻添加到聊天列表
+    if (!chatId) return; // 不应该发生，但保护一下
+    
+    const isFirstMessage = messages.length === 0;
+    
+    if (isFirstMessage) {
+      // 首条消息，添加到侧边栏
+      addChat({ id: chatId, title: "新对话" });
+    }
 
-    // 2. 立刻添加到聊天列表
-    addChat({ id: newChatId, title: "新对话" });
+    // 2. 发送消息
+    sendMessage({ text: inputText }, { body: { chatId } });
 
-    // 3. 发送消息（使用新 chatId）
-    sendMessage({ text: inputText }, { body: { chatId: newChatId } });
-
-    // 4. 后台生成标题
+    // 3. 后台生成标题
     fetch("/api/title", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: inputText, chatId: newChatId }),
+      body: JSON.stringify({ message: inputText, chatId }),
     })
       .then((res) => (res.ok ? res.json() : null))
       .then((data: { title?: string } | null) => {
         const title = data?.title?.trim() || "新对话";
-        updateChat(newChatId, { title });
+        updateChat(chatId, { title });
       })
       .catch((err) => console.error("Failed to generate title", err));
 
-    // 5. ✅ 用 history.pushState 改 URL，不触发 Next.js 路由导航
-    //    这样组件不会卸载，useChat 实例保留
-    //    但 pathname 会变化，ActiveChatProvider 会通过 usePathname 检测到
-    if (typeof window !== "undefined") {
-      window.history.pushState({}, "", `/app/${newChatId}`);
+    // 4. ✅ 如果是新对话，用 history.pushState 改 URL，不触发 Next.js 路由导航
+    if (isFirstMessage && typeof window !== "undefined" && window.location.pathname === "/") {
+      window.history.pushState({}, "", `/${chatId}`);
     }
   };
 
