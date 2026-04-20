@@ -18,18 +18,26 @@ export default function Chat() {
   const [loading, setLoading] = useState(Boolean(chatId));
   const [chatTitle, setChatTitle] = useState("");
 
-  const { messages, sendMessage, status, error } = useChat({
+  const { messages, sendMessage, status, error, setMessages } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/messages",
     }),
     id: chatId,
   });
 
-  // 只在首次加载或页面刷新时，从 API 获取聊天记录和标题
-  // 如果是从 NewChat 跳转过来，useChat 会复用已有状态，不会执行这个 fetch
+  // 页面加载时，先从 sessionStorage 读临时消息，然后从 API 获取完整历史
   useEffect(() => {
-    async function fetchChatInfo() {
+    async function initChat() {
       try {
+        // 1️⃣ 先从 sessionStorage 读（从 NewChat 跳过来的消息）
+        const cachedMessages = sessionStorage.getItem(`chatbot:messages:${chatId}`);
+        if (cachedMessages) {
+          const parsedMessages: UIMessage[] = JSON.parse(cachedMessages);
+          setMessages(parsedMessages);
+          sessionStorage.removeItem(`chatbot:messages:${chatId}`); // 读完删除
+        }
+
+        // 2️⃣ 从 API 获取完整的历史消息和标题
         const res = await fetch(`/api/messages?id=${chatId}`);
         if (res.ok) {
           const data: {
@@ -44,8 +52,9 @@ export default function Chat() {
 
           setChatTitle(data.title || "新对话");
 
-          // 只在消息为空时设置（说明是页面刷新场景）
-          if (messages.length === 0) {
+          // 只有当 sessionStorage 里没有消息时才从 API 设置
+          // （这样能保留最新的、正在流式生成中的消息）
+          if (!cachedMessages && data.messages.length > 0) {
             const formattedMessages: UIMessage[] = data.messages.map((msg) => ({
               id: msg.id,
               role: msg.role,
@@ -53,8 +62,7 @@ export default function Chat() {
               parts: [{ type: "text" as const, text: msg.content }],
               createdAt: new Date(msg.createdAt),
             }));
-            // 直接调用 useChat 的方法来设置消息
-            // 注意：这里假设 setMessages 可用，如果不可用需要用其他方式
+            setMessages(formattedMessages);
           }
         }
       } catch (fetchError) {
@@ -64,8 +72,8 @@ export default function Chat() {
       }
     }
 
-    fetchChatInfo();
-  }, [chatId, messages.length]);
+    initChat();
+  }, [chatId, setMessages]);
 
   const handleSend = async (inputText: string) => {
     sendMessage({ text: inputText }, { body: { chatId } });

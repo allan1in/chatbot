@@ -51,12 +51,26 @@ export default function NewChat() {
       })
       .catch((err) => console.error("Failed to generate title", err));
 
-    // 4. ✅ 立刻路由到 Chat[id] 页面
-    //    此时 useChat 的状态（messages, status）仍在 useChat hook 的内存中
-    //    Chat[id] 页面会用同一个 chatId 初始化 useChat，自动复用状态
-    startTransition(() => {
-      router.push(`/${chatId}`);
-    });
+    // 4. ✅ 绕过 Next.js 路由，直接用 History API 改 URL
+    //    这样能避免 Next.js 路由的加载动画闪烁
+    if (typeof window !== "undefined") {
+      // 存当前消息到 sessionStorage，Chat[id] 页面会先从这里读
+      sessionStorage.setItem(
+        `chatbot:messages:${chatId}`,
+        JSON.stringify(messages)
+      );
+      
+      // 用 window.history.pushState 改 URL，绕过 Next.js 路由
+      window.history.pushState({ chatId }, "", `/${chatId}`);
+      
+      // 然后手动触发 Next.js 导航到新的 chatId
+      // 但此时 URL 已经改了，useParams 会读取新的 chatId
+      // 这样可以避免路由层面的加载动画
+      startTransition(() => {
+        // 强制重新挂载 Chat[id] 组件
+        router.refresh();
+      });
+    }
   };
 
   return (
