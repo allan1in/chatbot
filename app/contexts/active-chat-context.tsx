@@ -27,11 +27,26 @@ const ActiveChatContext = createContext<ActiveChatContextValue | null>(null);
 
 export function ActiveChatProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const [currentPathname, setCurrentPathname] = useState(pathname);
+
+  // 监听 popstate 事件（浏览器回退/前进）
+  useEffect(() => {
+    const handlePopState = () => {
+      setCurrentPathname(window.location.pathname);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  // 也要监听 pathname 变化（初始加载）
+  useEffect(() => {
+    setCurrentPathname(pathname);
+  }, [pathname]);
   
   // 从 pathname 提取 chatId
   // /app -> 新对话（chatId 为空）
   // /app/abc123 -> 旧对话（chatId = "abc123"）
-  const pathSegments = pathname.split("/").filter(Boolean);
+  const pathSegments = currentPathname.split("/").filter(Boolean);
   const chatIdFromUrl = pathSegments.length > 1 ? pathSegments[1] : "";
   const isNewChat = !chatIdFromUrl;
 
