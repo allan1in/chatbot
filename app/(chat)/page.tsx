@@ -44,7 +44,7 @@ export default function NewChat() {
     //    ActiveChatProvider 会自动检测 URL 变化，从 API 加载消息
     //    不会闪烁因为消息已经在 useChat 的内存中
     startTransition(() => {
-      router.push(`/chat/${newChatId}`);
+      router.push(`/${newChatId}`);
     });
   };
 

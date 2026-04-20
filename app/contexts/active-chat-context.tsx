@@ -8,6 +8,7 @@ import {
   useContext,
   useEffect,
   useRef,
+  useState,
   type ReactNode,
 } from "react";
 
@@ -23,7 +24,8 @@ type ActiveChatContextValue = {
 const ActiveChatContext = createContext<ActiveChatContextValue | null>(null);
 
 function extractChatId(pathname: string): string | null {
-  const match = pathname.match(/\/chat\/([^/]+)/);
+  // 路由是 /[id]，不是 /chat/[id]
+  const match = pathname.match(/^\/([^/]+)$/);
   return match ? match[1] : null;
 }
 
@@ -43,25 +45,20 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
 
   const chatId = chatIdFromUrl ?? newChatIdRef.current;
 
-  const { messages, setMessages, sendMessage, status, error } = useChat({
-    transport: new DefaultChatTransport({
-      api: "/api/messages",
-    }),
-    id: chatId,
-  });
-
-  // 当 chatId 变化时，从 API 加载历史消息
+  // 先在本地持有初始化的消息
+  const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
   const loadedChatIdsRef = useRef(new Set<string>());
   const prevChatIdRef = useRef(chatId);
 
+  // 当 chatId 变化时，从 API 加载历史消息到 initialMessages
   useEffect(() => {
-    // 如果是切换到新的 chatId
     if (prevChatIdRef.current !== chatId) {
       prevChatIdRef.current = chatId;
       
       if (isNewChat) {
         // 新对话，清空消息
-        setMessages([]);
+        setInitialMessages([]);
+        loadedChatIdsRef.current.clear();
       } else if (!loadedChatIdsRef.current.has(chatId)) {
         // 旧对话，从 API 加载
         loadedChatIdsRef.current.add(chatId);
@@ -70,13 +67,30 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
           .then((res) => res.json())
           .then((data: { messages?: UIMessage[] }) => {
             if (data.messages) {
-              setMessages(data.messages);
+              // 转换成 useChat 期望的格式
+              const formattedMessages = data.messages.map((msg: any) => ({
+                id: msg.id,
+                role: msg.role,
+                content: msg.content,
+                parts: msg.parts || [{ type: "text" as const, text: msg.content }],
+                createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
+              }));
+              setInitialMessages(formattedMessages);
             }
           })
           .catch((err) => console.error("Failed to load chat history", err));
       }
     }
-  }, [chatId, isNewChat, setMessages]);
+  }, [chatId, isNewChat]);
+
+  // 创建 useChat，用 initialMessages 初始化
+  const { messages, setMessages, sendMessage, status, error } = useChat({
+    transport: new DefaultChatTransport({
+      api: "/api/messages",
+    }),
+    id: chatId,
+    initialMessages,
+  });
 
   // 重置新对话 id 当返回到新对话页面
   useEffect(() => {
