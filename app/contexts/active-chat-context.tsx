@@ -8,10 +8,8 @@ import {
   useContext,
   useEffect,
   useRef,
-  useState,
   type ReactNode,
 } from "react";
-import useSWR from "swr";
 
 type ActiveChatContextValue = {
   chatId: string;
@@ -27,10 +25,6 @@ const ActiveChatContext = createContext<ActiveChatContextValue | null>(null);
 function extractChatId(pathname: string): string | null {
   const match = pathname.match(/\/chat\/([^/]+)/);
   return match ? match[1] : null;
-}
-
-function fetcher(url: string) {
-  return fetch(url).then((res) => res.json());
 }
 
 export function ActiveChatProvider({ children }: { children: ReactNode }) {
@@ -49,24 +43,14 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
 
   const chatId = chatIdFromUrl ?? newChatIdRef.current;
 
-  // 从 API 获取历史消息（只在非新对话且 URL 变化时）
-  const { data: chatData, isLoading } = useSWR(
-    isNewChat ? null : `/api/messages?id=${chatId}`,
-    fetcher,
-    { revalidateOnFocus: false }
-  );
-
-  const initialMessages: UIMessage[] = isNewChat ? [] : (chatData?.messages ?? []);
-
   const { messages, setMessages, sendMessage, status, error } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/messages",
     }),
     id: chatId,
-    initialMessages,
   });
 
-  // 当 chatId 或 chatData 变化时，更新消息
+  // 当 chatId 变化时，从 API 加载历史消息
   const loadedChatIdsRef = useRef(new Set<string>());
   const prevChatIdRef = useRef(chatId);
 
@@ -78,20 +62,28 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
       if (isNewChat) {
         // 新对话，清空消息
         setMessages([]);
-      } else if (!loadedChatIdsRef.current.has(chatId) && chatData?.messages) {
+      } else if (!loadedChatIdsRef.current.has(chatId)) {
         // 旧对话，从 API 加载
         loadedChatIdsRef.current.add(chatId);
-        setMessages(chatData.messages);
+        
+        fetch(`/api/messages?id=${chatId}`)
+          .then((res) => res.json())
+          .then((data: { messages?: UIMessage[] }) => {
+            if (data.messages) {
+              setMessages(data.messages);
+            }
+          })
+          .catch((err) => console.error("Failed to load chat history", err));
       }
     }
-  }, [chatId, chatData?.messages, isNewChat, setMessages]);
+  }, [chatId, isNewChat, setMessages]);
 
   // 重置新对话 id 当返回到新对话页面
   useEffect(() => {
-    if (isNewChat && prevChatIdRef.current === chatId) {
+    if (isNewChat) {
       newChatIdRef.current = "";
     }
-  }, [isNewChat, chatId]);
+  }, [isNewChat]);
 
   return (
     <ActiveChatContext.Provider value={{ chatId, messages, setMessages, sendMessage, status, error: error as Error | undefined }}>
