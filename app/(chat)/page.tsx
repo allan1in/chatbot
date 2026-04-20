@@ -2,20 +2,18 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { useTransition, useState, useEffect } from "react";
+import { useTransition, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Input } from "@/components/input";
 import MessageList from "@/components/message-list";
 import { Navbar } from "@/components/navbar";
 import { useChatList } from "@/app/contexts/chat-list-context";
-import { useMessageContext } from "@/app/contexts/message-context";
 
 export default function NewChat() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const { addChat, updateChat } = useChatList();
-  const { setPendingMessages } = useMessageContext();
 
   const [chatId] = useState(() =>
     typeof crypto !== "undefined" && crypto.randomUUID
@@ -24,7 +22,6 @@ export default function NewChat() {
   );
 
   const [chatTitle, setChatTitle] = useState("");
-  const [shouldNavigate, setShouldNavigate] = useState(false);
 
   const { messages, sendMessage, status, error } = useChat({
     transport: new DefaultChatTransport({
@@ -33,28 +30,14 @@ export default function NewChat() {
     id: chatId,
   });
 
-  // 监听消息流完成，准备存到 Context 和路由
-  useEffect(() => {
-    if (shouldNavigate && status === "ready" && messages.length > 0) {
-      // ✅ 这时 messages 是最新的完整消息
-      setPendingMessages(chatId, messages);
-      
-      startTransition(() => {
-        router.push(`/${chatId}`);
-      });
-      
-      setShouldNavigate(false);
-    }
-  }, [shouldNavigate, status, messages, chatId, setPendingMessages, router]);
-
   const handleSend = async (inputText: string) => {
-    // 立刻添加到聊天列表
+    // 1. 立刻添加到聊天列表
     addChat({ id: chatId, title: "新对话" });
     
-    // 发送消息（开始流式传输）
+    // 2. 发送消息
     sendMessage({ text: inputText }, { body: { chatId } });
 
-    // 后台生成标题，不阻塞
+    // 3. 后台生成标题
     fetch("/api/title", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -68,8 +51,12 @@ export default function NewChat() {
       })
       .catch((err) => console.error("Failed to generate title", err));
 
-    // 标记需要导航，useEffect 会监听消息完成后自动路由
-    setShouldNavigate(true);
+    // 4. ✅ 立刻路由到 Chat[id] 页面
+    //    此时 useChat 的状态（messages, status）仍在 useChat hook 的内存中
+    //    Chat[id] 页面会用同一个 chatId 初始化 useChat，自动复用状态
+    startTransition(() => {
+      router.push(`/${chatId}`);
+    });
   };
 
   return (

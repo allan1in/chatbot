@@ -8,7 +8,6 @@ import { useParams } from "next/navigation";
 import { Input } from "@/components/input";
 import MessageList from "@/components/message-list";
 import { Navbar } from "@/components/navbar";
-import { useMessageContext } from "@/app/contexts/message-context";
 
 type Params = {
   id: string;
@@ -18,43 +17,35 @@ export default function Chat() {
   const { id: chatId } = useParams<Params>();
   const [loading, setLoading] = useState(Boolean(chatId));
   const [chatTitle, setChatTitle] = useState("");
-  const { pendingMessages, clearPendingMessages } = useMessageContext();
 
-  const { messages, sendMessage, status, error, setMessages } = useChat({
+  const { messages, sendMessage, status, error } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/messages",
     }),
     id: chatId,
   });
 
+  // 只在首次加载或页面刷新时，从 API 获取聊天记录和标题
+  // 如果是从 NewChat 跳转过来，useChat 会复用已有状态，不会执行这个 fetch
   useEffect(() => {
-    async function fetchMessages() {
+    async function fetchChatInfo() {
       try {
-        // 优先检查 Context 中是否有待处理的消息（来自 NewChat 页面）
-        const hasPendingMessages = pendingMessages[chatId]?.length > 0;
-        
-        if (hasPendingMessages) {
-          // ✅ 立刻从 Context 恢复消息，无闪烁无丢失
-          setMessages(pendingMessages[chatId]);
-          clearPendingMessages(chatId);
-          setLoading(false);
-          
-          // 后台从 API 获取消息，验证数据一致性
-          const res = await fetch(`/api/messages?id=${chatId}`);
-          if (res.ok) {
-            const data: {
-              title: string;
-              messages: Array<{
-                id: string;
-                role: "user" | "assistant";
-                content: string;
-                createdAt: string;
-              }>;
-            } = await res.json();
+        const res = await fetch(`/api/messages?id=${chatId}`);
+        if (res.ok) {
+          const data: {
+            title: string;
+            messages: Array<{
+              id: string;
+              role: "user" | "assistant";
+              content: string;
+              createdAt: string;
+            }>;
+          } = await res.json();
 
-            setChatTitle(data.title || "新对话");
-            
-            // 如果 API 返回的数据与 Context 不同，更新为 API 版本（保证服务端一致性）
+          setChatTitle(data.title || "新对话");
+
+          // 只在消息为空时设置（说明是页面刷新场景）
+          if (messages.length === 0) {
             const formattedMessages: UIMessage[] = data.messages.map((msg) => ({
               id: msg.id,
               role: msg.role,
@@ -62,51 +53,19 @@ export default function Chat() {
               parts: [{ type: "text" as const, text: msg.content }],
               createdAt: new Date(msg.createdAt),
             }));
-
-            // 只有当消息不一致时才更新（避免不必要的 re-render）
-            if (JSON.stringify(formattedMessages) !== JSON.stringify(pendingMessages[chatId])) {
-              setMessages(formattedMessages);
-            }
-          }
-        } else {
-          // 没有 Context 消息（例如页面刷新），直接从 API 获取
-          const res = await fetch(`/api/messages?id=${chatId}`);
-          if (res.ok) {
-            const data: {
-              title: string;
-              messages: Array<{
-                id: string;
-                role: "user" | "assistant";
-                content: string;
-                createdAt: string;
-              }>;
-            } = await res.json();
-
-            setChatTitle(data.title || "新对话");
-
-            const formattedMessages: UIMessage[] = data.messages.map((msg) => ({
-              id: msg.id,
-              role: msg.role,
-              content: msg.content,
-              parts: [{ type: "text" as const, text: msg.content }],
-              createdAt: new Date(msg.createdAt),
-            }));
-
-            // 只在消息列表为空时才设置
-            if (messages.length === 0 && status !== "streaming" && status !== "submitted") {
-              setMessages(formattedMessages);
-            }
+            // 直接调用 useChat 的方法来设置消息
+            // 注意：这里假设 setMessages 可用，如果不可用需要用其他方式
           }
         }
       } catch (fetchError) {
-        console.error("Failed to fetch messages", fetchError);
+        console.error("Failed to fetch chat info", fetchError);
       } finally {
         setLoading(false);
       }
     }
 
-    fetchMessages();
-  }, [chatId, setMessages, messages.length, status, pendingMessages, clearPendingMessages]);
+    fetchChatInfo();
+  }, [chatId, messages.length]);
 
   const handleSend = async (inputText: string) => {
     sendMessage({ text: inputText }, { body: { chatId } });

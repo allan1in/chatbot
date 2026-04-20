@@ -4,7 +4,6 @@ import { Geist } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { cn } from "@/lib/utils";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { MessageProvider } from "@/app/contexts/message-context";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
@@ -28,9 +27,7 @@ export default function RootLayout({
           storageKey="theme-preference"
         >
           <TooltipProvider>
-            <MessageProvider>
-              {children}
-            </MessageProvider>
+            {children}
           </TooltipProvider>
         </ThemeProvider>
       </body>
