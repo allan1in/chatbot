@@ -118,7 +118,7 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
         })
         .finally(() => setIsLoading(false));
     }
-  }, [chatId, isNewChat]);
+  }, [chatIdTrackerRef.current, isNewChat]);
 
   // 创建 useChat，用 initialMessages 初始化
   const { messages, setMessages, sendMessage, status, error } = useChat({
