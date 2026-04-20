@@ -9,11 +9,13 @@ import { Input } from "@/components/input";
 import MessageList from "@/components/message-list";
 import { Navbar } from "@/components/navbar";
 import { useChatList } from "@/app/contexts/chat-list-context";
+import { useMessageContext } from "@/app/contexts/message-context";
 
 export default function NewChat() {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const { addChat, updateChat } = useChatList();
+  const { setPendingMessages } = useMessageContext();
 
   const [chatId] = useState(() =>
     typeof crypto !== "undefined" && crypto.randomUUID
@@ -49,10 +51,14 @@ export default function NewChat() {
       })
       .catch((err) => console.error("Failed to generate title", err));
 
-    // 等待消息流完成后再路由跳转
+    // 等待消息流完成后，存到 Context 并路由
     const checkAndNavigate = setInterval(() => {
       if (status !== "streaming" && status !== "submitted") {
         clearInterval(checkAndNavigate);
+        
+        // 乐观更新：把当前消息存到 Context，Chat[id] 页面立刻读取
+        setPendingMessages(chatId, messages);
+        
         startTransition(() => {
           router.push(`/${chatId}`);
         });

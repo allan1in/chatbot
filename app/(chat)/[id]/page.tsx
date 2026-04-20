@@ -8,6 +8,7 @@ import { useParams } from "next/navigation";
 import { Input } from "@/components/input";
 import MessageList from "@/components/message-list";
 import { Navbar } from "@/components/navbar";
+import { useMessageContext } from "@/app/contexts/message-context";
 
 type Params = {
   id: string;
@@ -17,6 +18,7 @@ export default function Chat() {
   const { id: chatId } = useParams<Params>();
   const [loading, setLoading] = useState(Boolean(chatId));
   const [chatTitle, setChatTitle] = useState("");
+  const { pendingMessages, clearPendingMessages } = useMessageContext();
 
   const { messages, sendMessage, status, error, setMessages } = useChat({
     transport: new DefaultChatTransport({
@@ -28,31 +30,70 @@ export default function Chat() {
   useEffect(() => {
     async function fetchMessages() {
       try {
-        const res = await fetch(`/api/messages?id=${chatId}`);
-        if (res.ok) {
-          const data: {
-            title: string;
-            messages: Array<{
-              id: string;
-              role: "user" | "assistant";
-              content: string;
-              createdAt: string;
-            }>;
-          } = await res.json();
-
-          setChatTitle(data.title || "新对话");
-
-          const formattedMessages: UIMessage[] = data.messages.map((msg) => ({
-            id: msg.id,
-            role: msg.role,
-            content: msg.content,
-            parts: [{ type: "text" as const, text: msg.content }],
-            createdAt: new Date(msg.createdAt),
-          }));
+        // 优先检查是否有 Context 中的待处理消息（乐观更新）
+        const hasPendingMessages = pendingMessages[chatId]?.length > 0;
+        
+        if (hasPendingMessages) {
+          // 立刻使用 Context 中的消息，无闪烁
+          setMessages(pendingMessages[chatId]);
+          clearPendingMessages(chatId);
           
-          // 只在消息列表为空且不在流式传输中时才设置消息，避免覆盖正在进行的流
-          if (messages.length === 0 && status !== "streaming" && status !== "submitted") {
-            setMessages(formattedMessages);
+          // 后台验证消息是否真的保存了
+          const res = await fetch(`/api/messages?id=${chatId}`);
+          if (res.ok) {
+            const data: {
+              title: string;
+              messages: Array<{
+                id: string;
+                role: "user" | "assistant";
+                content: string;
+                createdAt: string;
+              }>;
+            } = await res.json();
+
+            setChatTitle(data.title || "新对话");
+
+            const formattedMessages: UIMessage[] = data.messages.map((msg) => ({
+              id: msg.id,
+              role: msg.role,
+              content: msg.content,
+              parts: [{ type: "text" as const, text: msg.content }],
+              createdAt: new Date(msg.createdAt),
+            }));
+
+            // API 返回的消息与 Context 不同时，用 API 的覆盖
+            if (JSON.stringify(formattedMessages) !== JSON.stringify(pendingMessages[chatId])) {
+              setMessages(formattedMessages);
+            }
+          }
+        } else {
+          // 没有 Context 消息，直接从 API 获取
+          const res = await fetch(`/api/messages?id=${chatId}`);
+          if (res.ok) {
+            const data: {
+              title: string;
+              messages: Array<{
+                id: string;
+                role: "user" | "assistant";
+                content: string;
+                createdAt: string;
+              }>;
+            } = await res.json();
+
+            setChatTitle(data.title || "新对话");
+
+            const formattedMessages: UIMessage[] = data.messages.map((msg) => ({
+              id: msg.id,
+              role: msg.role,
+              content: msg.content,
+              parts: [{ type: "text" as const, text: msg.content }],
+              createdAt: new Date(msg.createdAt),
+            }));
+
+            // 只在消息列表为空且不在流式传输中时才设置消息
+            if (messages.length === 0 && status !== "streaming" && status !== "submitted") {
+              setMessages(formattedMessages);
+            }
           }
         }
       } catch (fetchError) {
@@ -63,7 +104,7 @@ export default function Chat() {
     }
 
     fetchMessages();
-  }, [chatId, setMessages, messages.length, status]);
+  }, [chatId, setMessages, messages.length, status, pendingMessages, clearPendingMessages]);
 
   const handleSend = async (inputText: string) => {
     sendMessage({ text: inputText }, { body: { chatId } });
