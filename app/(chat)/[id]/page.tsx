@@ -49,7 +49,11 @@ export default function Chat() {
             parts: [{ type: "text" as const, text: msg.content }],
             createdAt: new Date(msg.createdAt),
           }));
-          setMessages(formattedMessages);
+          
+          // 只在消息列表为空且不在流式传输中时才设置消息，避免覆盖正在进行的流
+          if (messages.length === 0 && status !== "streaming" && status !== "submitted") {
+            setMessages(formattedMessages);
+          }
         }
       } catch (fetchError) {
         console.error("Failed to fetch messages", fetchError);
@@ -59,7 +63,7 @@ export default function Chat() {
     }
 
     fetchMessages();
-  }, [chatId, setMessages]);
+  }, [chatId, setMessages, messages.length, status]);
 
   const handleSend = async (inputText: string) => {
     sendMessage({ text: inputText }, { body: { chatId } });

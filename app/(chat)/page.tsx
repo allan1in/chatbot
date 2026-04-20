@@ -31,37 +31,33 @@ export default function NewChat() {
   });
 
   const handleSend = async (inputText: string) => {
-    let generatedTitle = "新对话";
-
-    try {
-      const titleRes = await fetch("/api/title", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          message: inputText,
-          chatId,
-        }),
-      });
-
-      if (titleRes.ok) {
-        const data: { title?: string } = await titleRes.json();
-        generatedTitle = data.title?.trim() || "新对话";
-      }
-    } catch (titleError) {
-      console.error("Failed to generate title", titleError);
-    }
-
-    setChatTitle(generatedTitle);
-    addChat({ id: chatId, title: generatedTitle });
-    updateChat(chatId, { title: generatedTitle });
-
-    startTransition(() => {
-      router.push(`/${chatId}`);
-    });
-
+    // 立刻发送消息，不阻塞
+    addChat({ id: chatId, title: "新对话" });
     sendMessage({ text: inputText }, { body: { chatId } });
+
+    // 后台生成标题，不阻塞路由
+    fetch("/api/title", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: inputText, chatId }),
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { title?: string } | null) => {
+        const title = data?.title?.trim() || "新对话";
+        setChatTitle(title);
+        updateChat(chatId, { title });
+      })
+      .catch((err) => console.error("Failed to generate title", err));
+
+    // 等待消息流完成后再路由跳转
+    const checkAndNavigate = setInterval(() => {
+      if (status !== "streaming" && status !== "submitted") {
+        clearInterval(checkAndNavigate);
+        startTransition(() => {
+          router.push(`/${chatId}`);
+        });
+      }
+    }, 100);
   };
 
   return (
