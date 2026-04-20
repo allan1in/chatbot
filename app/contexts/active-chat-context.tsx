@@ -7,6 +7,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -50,16 +51,16 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
   const chatIdFromUrl = pathSegments.length > 0 ? pathSegments[0] : "";
   const isNewChat = !chatIdFromUrl;
 
-  // 为新对话生成一个临时 chatId
-  const newChatIdRef = useRef("");
-  if (isNewChat && !newChatIdRef.current) {
-    newChatIdRef.current =
-      typeof crypto !== "undefined" && crypto.randomUUID
-        ? crypto.randomUUID()
-        : Math.random().toString(36).substring(2, 15);
-  }
-
-  const chatId = chatIdFromUrl || newChatIdRef.current;
+  // 为新对话生成一个临时 chatId，用 useMemo 确保只生成一次
+  const chatId = useMemo(() => {
+    if (chatIdFromUrl) {
+      return chatIdFromUrl;
+    }
+    // 新对话时，生成临时 id，一直保持直到用户发送消息
+    return typeof crypto !== "undefined" && crypto.randomUUID
+      ? crypto.randomUUID()
+      : Math.random().toString(36).substring(2, 15);
+  }, [chatIdFromUrl]);
 
   // 状态
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
@@ -67,46 +68,41 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   
   const loadedChatIdsRef = useRef(new Set<string>());
-  const prevChatIdRef = useRef(chatId);
 
-  // 当 chatId 变化时，从 API 加载历史消息
+  // 当 chatId 或 isNewChat 变化时，从 API 加载历史消息
   useEffect(() => {
-    if (prevChatIdRef.current !== chatId) {
-      prevChatIdRef.current = chatId;
-      
-      if (isNewChat) {
-        // 新对话，清空消息和标题
-        setInitialMessages([]);
-        setChatTitle("");
-        loadedChatIdsRef.current.clear();
-      } else if (!loadedChatIdsRef.current.has(chatId)) {
-        // 旧对话，从 API 加载
-        loadedChatIdsRef.current.add(chatId);
-        setIsLoading(true);
+    if (isNewChat) {
+      // 新对话，清空消息和标题
+      setInitialMessages([]);
+      setChatTitle("");
+      loadedChatIdsRef.current.clear();
+    } else if (!loadedChatIdsRef.current.has(chatId)) {
+      // 旧对话，从 API 加载
+      loadedChatIdsRef.current.add(chatId);
+      setIsLoading(true);
 
-        fetch(`/api/messages?id=${chatId}`)
-          .then((res) => res.json())
-          .then((data: { title?: string; messages?: UIMessage[] }) => {
-            setChatTitle(data.title || "新对话");
-            
-            if (data.messages) {
-              // 转换成 useChat 期望的格式
-              const formattedMessages = data.messages.map((msg: any) => ({
-                id: msg.id,
-                role: msg.role,
-                content: msg.content,
-                parts: msg.parts || [{ type: "text" as const, text: msg.content }],
-                createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
-              }));
-              setInitialMessages(formattedMessages);
-            }
-          })
-          .catch((err) => {
-            console.error("Failed to load chat history", err);
-            setChatTitle("新对话");
-          })
-          .finally(() => setIsLoading(false));
-      }
+      fetch(`/api/messages?id=${chatId}`)
+        .then((res) => res.json())
+        .then((data: { title?: string; messages?: UIMessage[] }) => {
+          setChatTitle(data.title || "新对话");
+          
+          if (data.messages) {
+            // 转换成 useChat 期望的格式
+            const formattedMessages = data.messages.map((msg: any) => ({
+              id: msg.id,
+              role: msg.role,
+              content: msg.content,
+              parts: msg.parts || [{ type: "text" as const, text: msg.content }],
+              createdAt: msg.createdAt ? new Date(msg.createdAt) : new Date(),
+            }));
+            setInitialMessages(formattedMessages);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to load chat history", err);
+          setChatTitle("新对话");
+        })
+        .finally(() => setIsLoading(false));
     }
   }, [chatId, isNewChat]);
 
@@ -118,13 +114,6 @@ export function ActiveChatProvider({ children }: { children: ReactNode }) {
     id: chatId,
     initialMessages,
   });
-
-  // 重置新对话 id 当返回到新对话页面
-  useEffect(() => {
-    if (isNewChat) {
-      newChatIdRef.current = "";
-    }
-  }, [isNewChat]);
 
   return (
     <ActiveChatContext.Provider
