@@ -50,7 +50,7 @@ export default function NewChat() {
 
   return (
     <>
-      <Navbar title={chatTitle} isTitleLoading={false} />
+      <Navbar title="" isTitleLoading={false} />
       <main className="flex min-h-0 w-full min-w-0 flex-1 flex-col items-center justify-start">
         <div className="relative min-h-0 w-full flex-1">
           <MessageList
