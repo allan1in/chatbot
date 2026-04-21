@@ -38,7 +38,7 @@ export async function POST(req: Request) {
             update: { updatedAt: new Date() },
             create: {
               id: chatId,
-              title: userContent.slice(0, 20), // 使用用户消息的前 20 个字符作为标题
+              title: userContent.slice(0, 15), 
             }
           });
 

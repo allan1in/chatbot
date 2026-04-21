@@ -17,7 +17,8 @@ export default function New() {
   const handleSend = async (inputText: string) => {
     addChat({
       id: id,
-      title: inputText.slice(0, 20),
+      title: "",
+      loading: true
     });
     saveMsg(id, inputText);
     router.push(`/${id}`);

@@ -5,6 +5,7 @@ import { createContext, useContext, useState, useEffect } from "react";
 export type ChatItem = {
   id: string;
   title: string;
+  loading?: boolean;
 };
 
 type ChatContextType = {
@@ -12,6 +13,8 @@ type ChatContextType = {
   isLoadingChats: boolean;
   addChat: (chat: ChatItem) => void;
   removeChat: (chatId: string) => void;
+  setChatLoading: (chatId: string, loading: boolean) => void;
+  setChatTitle: (chatId: string, title: string) => void;
 };
 
 const ChatContext = createContext<ChatContextType | null>(null);
@@ -29,7 +32,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
       }
 
       const data = await res.json();
-      setChats(data);
+      const chatsWithLoading: ChatItem[] = data.map((chat: ChatItem) => ({
+        ...chat,
+        loading: false,
+      }));
+      setChats(chatsWithLoading);
     } catch (err) {
       console.error("Fetch chats error:", err);
     } finally {
@@ -43,7 +50,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         return prev;
       }
 
-      return [newChat, ...prev];
+      return [{ ...newChat, loading: newChat.loading ?? false }, ...prev];
     });
   };
 
@@ -51,13 +58,29 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setChats((prev) => prev.filter((chat) => chat.id !== chatId));
   };
 
+  const setChatLoading = (chatId: string, loading: boolean) => {
+    setChats((prev) =>
+      prev.map((chat) =>
+        chat.id === chatId ? { ...chat, loading } : chat
+      )
+    );
+  };
+
+  const setChatTitle = (chatId: string, title: string) => {
+    setChats((prev) =>
+      prev.map((chat) =>
+        chat.id === chatId ? { ...chat, title } : chat
+      )
+    );
+  }
+
   useEffect(() => {
     fetchChats();
   }, []);
 
   return (
     <ChatContext.Provider
-      value={{ chats, isLoadingChats, addChat, removeChat }}
+      value={{ chats, isLoadingChats, addChat, removeChat, setChatLoading, setChatTitle }}
     >
       {children}
     </ChatContext.Provider>

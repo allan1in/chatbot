@@ -25,6 +25,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
+import { Skeleton } from "./ui/skeleton";
 
 export function AppSidebar() {
   const { chats, isLoadingChats, removeChat } = useChatList();
@@ -85,50 +86,56 @@ export function AppSidebar() {
                 </div>
               ) : (
                 <SidebarMenu>
-                  {chats.map((item, index) => (
-                    <SidebarMenuItem
-                      key={item.id}
-                      className={cn(
-                        "opacity-0 animate-[slide-in-left_0.4s_ease-out_forwards]",
-                        `[animation-delay:${index * 10}ms]`,
-                      )}
-                    >
-                      <SidebarMenuButton
-                        isActive={pathname === `/${item.id}`}
-                        size="lg"
-                        render={<Link href={`/${item.id}`} />}
+                  {chats.map((item) =>
+                    item.loading ? (
+                      <Skeleton
+                        key={item.id}
+                        className="h-10 w-full rounded-md animate-in fade-in duration-300 ease-out"
+                      />
+                    ) : (
+                      <SidebarMenuItem
+                        key={item.id}
+                        className={cn(
+                          "opacity-0 animate-[slide-in-left_0.3s_ease-out_forwards]",
+                        )}
                       >
-                        <span className="text-sm">{item.title}</span>
-                      </SidebarMenuButton>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger
-                          render={
-                            <SidebarMenuAction
-                              showOnHover
-                              className="rounded-sm data-[state=open]:bg-accent cursor-pointer"
-                            />
-                          }
+                        <SidebarMenuButton
+                          isActive={pathname === `/${item.id}`}
+                          size="lg"
+                          render={<Link href={`/${item.id}`} />}
                         >
-                          <Ellipsis />
-                          <span className="sr-only">More</span>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent
-                          className="w-24 rounded-lg"
-                          side={isMobile ? "bottom" : "right"}
-                          align={isMobile ? "end" : "start"}
-                        >
-                          <DropdownMenuItem
-                            className="cursor-pointer"
-                            variant="destructive"
-                            onClick={() => handleDeleteChat(item.id)}
+                          <span className="text-sm">{item.title}</span>
+                        </SidebarMenuButton>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            render={
+                              <SidebarMenuAction
+                                showOnHover
+                                className="rounded-sm data-[state=open]:bg-accent cursor-pointer"
+                              />
+                            }
                           >
-                            <Trash />
-                            <span>删除</span>
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </SidebarMenuItem>
-                  ))}
+                            <Ellipsis />
+                            <span className="sr-only">More</span>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent
+                            className="w-24 rounded-lg"
+                            side={isMobile ? "bottom" : "right"}
+                            align={isMobile ? "end" : "start"}
+                          >
+                            <DropdownMenuItem
+                              className="cursor-pointer"
+                              variant="destructive"
+                              onClick={() => handleDeleteChat(item.id)}
+                            >
+                              <Trash />
+                              <span>删除</span>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </SidebarMenuItem>
+                    ),
+                  )}
                 </SidebarMenu>
               )}
             </SidebarGroupContent>
