@@ -1,17 +1,11 @@
 import { ToggleCopy } from "./toggle-copy";
 import { ReactNode } from "react";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
+import { CodeBlock } from "./code-block";
 
 type HeadingProps = React.HTMLAttributes<HTMLHeadingElement>;
 type ParagraphProps = React.HTMLAttributes<HTMLParagraphElement>;
 type ListProps = React.HTMLAttributes<HTMLUListElement | HTMLOListElement>;
 type ListItemProps = React.HTMLAttributes<HTMLLIElement>;
-
-interface CodeProps extends React.HTMLAttributes<HTMLElement> {
-  inline?: boolean;
-  className?: string;
-}
 
 interface PreProps {
   children?: ReactNode;
@@ -26,45 +20,15 @@ export const markdownComponents = {
   ol: (props: ListProps) => <ol className="list-decimal ml-6 mb-4 space-y-1.5" {...props} />,
   li: (props: ListItemProps) => <li className="pl-1" {...props} />,
   pre: ({ children }: PreProps) => <>{children}</>,
-  code: ({ inline, children, className, ...props }: CodeProps) => {
+  code: ({ inline, children, className, ...props }: any) => {
     const match = /language-(\w+)/.exec(className || '');
     const codeString = String(children).replace(/\n$/, '');
 
-    return !inline && match ? (
-      <div className="group relative my-6 rounded-xl overflow-hidden border border-border  bg-muted">
-        <div className="flex items-center justify-between px-4 py-2 bg-muted border-b border-border">
-          <div className="flex items-center gap-2">
-            <span className="text-muted-foreground">
-              {match[1]}
-            </span>
-          </div>
-          <ToggleCopy 
-            content={codeString}
-            iconA="copy" 
-            iconB="check" 
-            className="flex items-center"
-            autoResetDelay={3000}
-          />
-        </div>
-        
-        {/* <pre className="p-4 overflow-x-auto text-sm font-mono leading-relaxed scrollbar-thin" {...props}>
-          <code>{codeString}</code>
-        </pre> */}
-        <SyntaxHighlighter
-          language={match[1]}
-          style={oneDark}
-          PreTag="div"
-          customStyle={{
-            margin: 0,
-            padding: '1rem',
-            fontSize: '0.875rem',
-            background: 'transparent',
-          }}
-        >
-          {codeString}
-        </SyntaxHighlighter>
-      </div>
-    ) : (
+    if (!inline && match) {
+      return <CodeBlock language={match[1]} code={codeString} />;
+    }
+
+    return (
       <code className="bg-muted px-1.5 py-0.5 mx-1.5 rounded text-[0.85em] font-mono font-medium border border-border/40" {...props}>
         {children}
       </code>
