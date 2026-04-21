@@ -70,65 +70,69 @@ export function AppSidebar() {
           </SidebarMenu>
         </div>
 
-        <SidebarGroup className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <SidebarGroupLabel className="text-sm h-10 p-2 flex items-center gap-2">
-            <HistoryIcon className="size-4" />
-            <span>对话</span>
-          </SidebarGroupLabel>
-          <SidebarGroupContent className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
-            {isLoadingChats ? (
-              <div className="flex h-full min-h-24 items-center justify-center px-3 text-sidebar-foreground/70">
-                <LoadingDots className="text-sidebar-foreground/70" />
-              </div>
-            ) : (
-              <SidebarMenu>
-                {chats.map((item, index) => (
-                  <SidebarMenuItem
-                    key={item.id}
-                    className={cn(
-                      "opacity-0 animate-[slide-in-left_0.4s_ease-out_forwards]",
-                      `[animation-delay:${index * 10}ms]`,
-                    )}
-                  >
-                    <SidebarMenuButton
-                      isActive={pathname === `/${item.id}`}
-                      size="lg"
-                      render={<Link href={`/${item.id}`} />}
+        <SidebarGroup className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
+          <div className="p-2">
+            <SidebarGroupLabel className="text-sm h-10 p-2 flex items-center gap-2">
+              <HistoryIcon className="size-4" />
+              <span>对话</span>
+            </SidebarGroupLabel>
+          </div>
+          <div className="pl-2 min-h-0 flex-1 overflow-y-auto scrollbar-thin [scrollbar-gutter:stable]">
+            <SidebarGroupContent className="h-full">
+              {isLoadingChats ? (
+                <div className="flex h-full min-h-24 items-center justify-center px-3 text-sidebar-foreground/70">
+                  <LoadingDots className="text-sidebar-foreground/70" />
+                </div>
+              ) : (
+                <SidebarMenu>
+                  {chats.map((item, index) => (
+                    <SidebarMenuItem
+                      key={item.id}
+                      className={cn(
+                        "opacity-0 animate-[slide-in-left_0.4s_ease-out_forwards]",
+                        `[animation-delay:${index * 10}ms]`,
+                      )}
                     >
-                      <span className="text-sm">{item.title}</span>
-                    </SidebarMenuButton>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        render={
-                          <SidebarMenuAction
-                            showOnHover
-                            className="rounded-sm data-[state=open]:bg-accent cursor-pointer"
-                          />
-                        }
+                      <SidebarMenuButton
+                        isActive={pathname === `/${item.id}`}
+                        size="lg"
+                        render={<Link href={`/${item.id}`} />}
                       >
-                        <Ellipsis />
-                        <span className="sr-only">More</span>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent
-                        className="w-24 rounded-lg"
-                        side={isMobile ? "bottom" : "right"}
-                        align={isMobile ? "end" : "start"}
-                      >
-                        <DropdownMenuItem
-                          className="cursor-pointer"
-                          variant="destructive"
-                          onClick={() => handleDeleteChat(item.id)}
+                        <span className="text-sm">{item.title}</span>
+                      </SidebarMenuButton>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger
+                          render={
+                            <SidebarMenuAction
+                              showOnHover
+                              className="rounded-sm data-[state=open]:bg-accent cursor-pointer"
+                            />
+                          }
                         >
-                          <Trash />
-                          <span>删除</span>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            )}
-          </SidebarGroupContent>
+                          <Ellipsis />
+                          <span className="sr-only">More</span>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          className="w-24 rounded-lg"
+                          side={isMobile ? "bottom" : "right"}
+                          align={isMobile ? "end" : "start"}
+                        >
+                          <DropdownMenuItem
+                            className="cursor-pointer"
+                            variant="destructive"
+                            onClick={() => handleDeleteChat(item.id)}
+                          >
+                            <Trash />
+                            <span>删除</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              )}
+            </SidebarGroupContent>
+          </div>
         </SidebarGroup>
       </SidebarContent>
     </Sidebar>

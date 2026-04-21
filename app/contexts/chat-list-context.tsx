@@ -11,7 +11,6 @@ type ChatContextType = {
   chats: ChatItem[];
   isLoadingChats: boolean;
   addChat: (chat: ChatItem) => void;
-  updateChat: (chatId: string, patch: Partial<ChatItem>) => void;
   removeChat: (chatId: string) => void;
 };
 
@@ -38,10 +37,6 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  useEffect(() => {
-    fetchChats();
-  }, []);
-
   const addChat = (newChat: ChatItem) => {
     setChats((prev) => {
       if (prev.some((chat) => chat.id === newChat.id)) {
@@ -52,26 +47,17 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const updateChat = (chatId: string, patch: Partial<ChatItem>) => {
-    setChats((prev) =>
-      prev.map((chat) =>
-        chat.id === chatId
-          ? {
-              ...chat,
-              ...patch,
-            }
-          : chat,
-      ),
-    );
-  };
-
   const removeChat = (chatId: string) => {
     setChats((prev) => prev.filter((chat) => chat.id !== chatId));
   };
 
+  useEffect(() => {
+    fetchChats();
+  }, []);
+
   return (
     <ChatContext.Provider
-      value={{ chats, isLoadingChats, addChat, updateChat, removeChat }}
+      value={{ chats, isLoadingChats, addChat, removeChat }}
     >
       {children}
     </ChatContext.Provider>
