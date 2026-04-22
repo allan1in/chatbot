@@ -49,7 +49,6 @@ export const CodeBlock = memo(({ language, code, className }: CodeBlockProps) =>
         language={language}
       >
         {({ className: prismClassName, style, tokens, getLineProps, getTokenProps }) => {
-          const start = performance.now();
           const content = (
             <pre 
               className={cn(prismClassName, "p-4 overflow-x-auto text-sm font-mono leading-relaxed scrollbar-thin")} 
@@ -66,11 +65,6 @@ export const CodeBlock = memo(({ language, code, className }: CodeBlockProps) =>
               </code>
             </pre>
           );
-          
-          if (process.env.NODE_ENV === 'development') {
-            const end = performance.now();
-            console.log(`[CodeBlock] prism-render took ${(end - start).toFixed(2)}ms, tokens: ${tokens.length}, lines: ${tokens.length}`);
-          }
           
           return content;
         }}
