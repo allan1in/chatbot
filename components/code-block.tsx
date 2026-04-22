@@ -34,10 +34,19 @@ export const CodeBlock = memo(({ language, code, className }: CodeBlockProps) =>
         code={code}
         language={language}
       >
-        {({ className: prismClassName, style }) => (
-          <pre className="p-4 overflow-x-auto text-sm font-mono leading-relaxed scrollbar-thin bg-muted text-foreground">
-            <code className={cn(prismClassName, "font-mono")} style={style}>
-              {code}
+        {({ className: prismClassName, style, tokens, getLineProps, getTokenProps }) => (
+          <pre 
+            className={cn(prismClassName, "p-4 overflow-x-auto text-sm font-mono leading-relaxed scrollbar-thin")} 
+            style={style}
+          >
+            <code>
+              {tokens.map((line, i) => (
+                <div {...getLineProps({ line, key: i })}>
+                  {line.map((token, key) => (
+                    <span {...getTokenProps({ token, key })} />
+                  ))}
+                </div>
+              ))}
             </code>
           </pre>
         )}
