@@ -12,46 +12,70 @@ interface CodeBlockProps {
 }
 
 export const CodeBlock = memo(({ language, code, className }: CodeBlockProps) => {
-  // 核心优化：使用 throttledCode 来避免由于流式输出导致的频繁解析
-  const [throttledCode, setThrottledCode] = useState(code);
-  const lastUpdateTimeRef = useRef(0);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // 1. 状态管理
+  // 核心：我们维护两个 code 状态。一个是原始的（用于逐字流式显示），一个是解析后的（用于高亮）
+  const [highlightedTokens, setHighlightedTokens] = useState<any[] | null>(null);
+  const [isParsing, setIsParsing] = useState(false);
+  
+  // 2. Worker 引用
+  const workerRef = useRef<Worker | null>(null);
+  const lastProcessedCodeRef = useRef<string>("");
+  const requestRef = useRef<number | null>(null);
 
+  // 3. 初始化 Worker
   useEffect(() => {
-    // 每次 code 变化时，尝试进行节流更新
-    const throttleMs = 500; // 500ms 更新一次解析，平衡实时感和性能
-    const now = Date.now();
-    const timeSinceLastUpdate = now - lastUpdateTimeRef.current;
+    // 注意：在 Vite/Next.js 中，使用 new Worker(new URL('./path', import.meta.url)) 是标准做法
+    // 但为了兼容性，我们假设环境支持这种方式
+    try {
+      workerRef.current = new Worker(new URL("./prism.worker.ts", import.meta.url), {
+        type: 'module'
+      });
 
-    // 清除之前的待执行更新，防止堆积
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
+      workerRef.current.onmessage = (e) => {
+        const { tokens, success, error } = e.data;
+        if (success) {
+          setHighlightedTokens(tokens);
+        } else {
+          console.error("[CodeBlock Worker Error]", error);
+        }
+        setIsParsing(false);
+      };
+    } catch (err) {
+      console.error("[CodeBlock] Failed to initialize Worker. Falling back to main thread.", err);
+      workerRef.current = null;
     }
 
-    if (timeSinceLastUpdate >= throttleMs) {
-      // 如果距离上次更新已超过阈值，立即更新
-      setThrottledCode(code);
-      lastUpdateTimeRef.current = now;
-    } else {
-      // 否则，计划在阈值到达时更新（trailing edge throttle）
-      const delay = throttleMs - timeSinceLastUpdate;
-      timeoutRef.current = setTimeout(() => {
-        setThrottledCode(code);
-        lastUpdateTimeRef.current = Date.now();
-      }, delay);
-    }
-
-    // 组件卸载时清理定时器
     return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      workerRef.current?.terminate();
     };
-  }, [code]);
+  }, []);
 
-  // 确保 language 变化时立即更新（虽然 language 通常不会变）
+  // 4. 监听 code 变化，调度 Worker 任务
   useEffect(() => {
-    setThrottledCode(code);
-  }, [language]);
+    if (!workerRef.current) return;
+
+    // 如果 code 没有变化，或者当前正在处理，则跳过（防止任务堆积）
+    if (code === lastProcessedCodeRef.current) return;
+
+    // 任务调度：由于 AI 吐字极快，我们不需要解析每一次变化，
+    // 只要保证“解析”这个动作是异步且不阻塞的即可。
+    // 我们使用 requestAnimationFrame 来确保解析任务不会过度挤占渲染帧。
+    if (requestRef.current) cancelAnimationFrame(requestRef.current);
+
+    requestRef.current = requestAnimationFrame(() => {
+      setIsParsing(true);
+      lastProcessedCodeRef.current = code;
+      workerRef.current?.postMessage({
+        language,
+        code,
+        id: Date.now() // 用于匹配请求
+      });
+    });
+
+    return () => {
+      if (requestRef.current) cancelAnimationFrame(requestRef.current);
+    };
+  }, [code, language]);
 
   return (
     <div className={cn("group relative my-6 rounded-xl overflow-hidden border border-border bg-muted", className)}>
@@ -62,7 +86,7 @@ export const CodeBlock = memo(({ language, code, className }: CodeBlockProps) =>
           </span>
         </div>
         <ToggleCopy 
-          content={code} // 复制时依然使用完整的原始 code
+          content={code} // 复制始终使用最原始、最完整的 code
           iconA="copy" 
           iconB="check" 
           className="flex items-center"
@@ -72,25 +96,40 @@ export const CodeBlock = memo(({ language, code, className }: CodeBlockProps) =>
       
       <Highlight
         theme={themes.vsDark}
-        code={throttledCode} // 使用节流后的代码进行高亮解析
+        code={code} // 这里的 code 始终保持原始状态，保证逐字流式的丝滑感
         language={language}
       >
-        {({ className: prismClassName, style, tokens, getLineProps, getTokenProps }) => (
-          <pre 
-            className={cn(prismClassName, "p-4 overflow-x-auto text-sm font-mono leading-relaxed scrollbar-thin")} 
-            style={style}
-          >
-            <code>
-              {tokens.map((line, i) => (
-                <div key={i} {...getLineProps({ line, key: i })}>
-                  {line.map((token, key) => (
-                    <span key={key} {...getTokenProps({ token, key })} />
-                  ))}
-                </div>
-              ))}
-            </code>
-          </pre>
-        )}
+        {({ className: prismClassName, style, tokens, getLineProps, getTokenProps }) => {
+          // 如果 Worker 还没解析完，或者我们没有解析结果，
+          // 我们【不使用】Highlight 提供的 tokens，而是直接渲染原始代码
+          // 这样既保证了逐字流式的流畅（因为没经过正则），又保证了不卡顿。
+          
+          if (!highlightedTokens || highlightedTokens.length === 0) {
+            return (
+              <pre className={cn(prismClassName, "p-4 overflow-x-auto text-sm font-mono leading-relaxed scrollbar-thin")} style={style}>
+                <code>{code}</code>
+              </pre>
+            );
+          }
+
+          // 如果解析成功了，我们使用 Worker 返回的 tokens 进行高亮渲染
+          return (
+            <pre 
+              className={cn(prismClassName, "p-4 overflow-x-auto text-sm font-mono leading-relaxed scrollbar-thin")} 
+              style={style}
+            >
+              <code>
+                {highlightedTokens.map((line, i) => (
+                  <div key={i} {...getLineProps({ line, key: i })}>
+                    {line.map((token, key) => (
+                      <span key={key} {...getTokenProps({ token, key })} />
+                    ))}
+                  </div>
+                ))}
+              </code>
+            </pre>
+          );
+        }}
       </Highlight>
     </div>
   );
