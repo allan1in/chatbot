@@ -115,7 +115,6 @@ export const CodeBlock = memo(function CodeBlock({
   }, []);
 
   // RAF 节流：每帧只发一次 Worker 请求
-  // 流式过程中每次代码变化只节流到 60fps，Worker 在后台逐帧 tokenize
   const rafRef = useRef(0);
 
   useEffect(() => {
@@ -125,32 +124,48 @@ export const CodeBlock = memo(function CodeBlock({
 
     cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(() => {
-      // 每次 RAF 发送最新完整代码给 Worker
-      // Worker 是后台线程，不影响主线程
-      // chunk 机制保证结果逐步到达，不会一次性大规模 re-render
       const id = performance.now();
       pendingIdRef.current = id;
       workerRef.current?.postMessage({ code: codeRef.current, language, id });
     });
   });
 
-  const hasHighlight = workerLines && workerLines.length > 0;
+  // --- 渲染策略：三段式 ---
+  // 1. Worker 还没结果 → 纯文本（单文本节点，最快）
+  // 2. Worker 覆盖了全部行 → 全高亮（workerLines.map，无 code.split 开销）
+  // 3. 过渡期（部分行未处理）→ 混合渲染
+  const codeLines = code.split('\n');
+  const allLinesReady = workerLines && workerLines.length >= codeLines.length;
 
-  const codeContent = hasHighlight ? (
-    workerLines!.map((line, i) => (
-      <div key={i}>
-        {line.length > 0
-          ? line.map((token, j) => (
-              <span key={j} style={getTokenStyle(token.types)}>
-                {token.content}
-              </span>
-            ))
-          : "\u00A0"}
-      </div>
-    ))
-  ) : (
-    code
-  );
+  const codeContent = !workerLines
+    ? code  // 场景 1：纯文本 text node
+    : allLinesReady
+    ? workerLines.map((line, i) => (  // 场景 2：全高亮，无 code.split 比较
+        <div key={i}>
+          {line.length > 0
+            ? line.map((token, j) => (
+                <span key={j} style={getTokenStyle(token.types)}>
+                  {token.content}
+                </span>
+              ))
+            : '\u00A0'}
+        </div>
+      ))
+    : codeLines.map((line, i) => {  // 场景 3：混合（过渡期短暂存在）
+        const tokens = workerLines[i];
+        if (tokens && tokens.length > 0) {
+          return (
+            <div key={i}>
+              {tokens.map((token, j) => (
+                <span key={j} style={getTokenStyle(token.types)}>
+                  {token.content}
+                </span>
+              ))}
+            </div>
+          );
+        }
+        return <div key={i}>{line || '\u00A0'}</div>;
+      });
 
   return (
     <div className="group relative my-6 rounded-xl overflow-hidden border border-border bg-[hsl(220,13%,18%)]">
