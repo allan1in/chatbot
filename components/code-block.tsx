@@ -14,215 +14,109 @@ interface WorkerToken {
 type WorkerLine = WorkerToken[];
 
 // ============================================================
-// Worker 代码（内联，Blob URL 加载，避免 Next.js 编译问题）
+// Worker 代码（内联，Blob URL 加载）
+// 用 String.raw 避免模板字面量的转义问题！
 // ============================================================
-const WORKER_SOURCE = `
-const LANG_DEFS = {
-  js: {
-    keywords: "async await break case catch class const continue debugger default delete do else enum export extends finally for function if import in instanceof let new of return static super switch this throw try typeof var void while with yield".split(" "),
-    patterns: [
-      [/\\/\\/.*/, "comment"],
-      [/\\/\\*[\\s\\S]*?\\*\\//, "comment"],
-      [/"[^"]*"/, "string"],
-      [/\`[^\`]*\`/, "string"],
-      [/'[^']*'/, "string"],
-      [/\\b(0[xX][\\da-f]+|0[bB][01]+|0[oO][0-7]+)\\b/, "number"],
-      [/\\b\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b/, "number"],
-    ],
-  },
-  py: {
-    keywords: "and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield".split(" "),
-    patterns: [
-      [/#.*/, "comment"],
-      [/"""/, "string"],
-      [/'''/, "string"],
-      [/"[^"]*"/, "string"],
-      [/'[^']*'/, "string"],
-      [/\\b(0[xX][\\da-f]+|0[bB][01]+|0[oO][0-7]+)\\b/, "number"],
-      [/\\b\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b/, "number"],
-      [/@\\w+/, "decorator"],
-    ],
-  },
-  html: {
-    patterns: [
-      [/<!--[\\s\\S]*?-->/, "comment"],
-      [/<\\/?[\\w-]+(?:\\s[^>]*)?\\/?>/, "tag"],
-      [/"[^"]*"/, "string"],
-      [/'[^']*'/, "string"],
-    ],
-  },
-  css: {
-    patterns: [
-      [/\\/\\*[\\s\\S]*?\\*\\//, "comment"],
-      [/@\\w+(?:[^{};]*[;{])/, "atrule"],
-      [/\\.?[\\w-]+(?=\\s*\\{)/, "class-name"],
-      [/#[0-9a-fA-F]{3,8}\\b/, "number"],
-      [/"[^"]*"/, "string"],
-      [/'[^']*'/, "string"],
-    ],
-  },
+const WORKER_SOURCE = String.raw`var LANG_DEFS = {
+  js: { keywords: "async await break case catch class const continue debugger default delete do else enum export extends finally for function if import in instanceof let new of return static super switch this throw try typeof var void while with yield".split(" "), patterns: [
+    [/\/\/.*/, "comment"],
+    [/\/\*[\s\S]*?\*\//, "comment"],
+    [/"[^"]*"/, "string"],
+    [/\`[^\`]*\`/, "string"],
+    [/'[^']*'/, "string"],
+    [/\b(0[xX][\da-f]+|0[bB][01]+|0[oO][0-7]+)\b/, "number"],
+    [/\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b/, "number"],
+  ]},
+  py: { keywords: "and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield".split(" "), patterns: [
+    [/#.*/, "comment"], [/"""/, "string"], [/'''/, "string"],
+    [/"[^"]*"/, "string"], [/'[^']*'/, "string"],
+    [/\b(0[xX][\da-f]+|0[bB][01]+|0[oO][0-7]+)\b/, "number"],
+    [/\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b/, "number"],
+    [/@\w+/, "decorator"],
+  ]},
+  html: { patterns: [
+    [/<!--[\s\S]*?-->/, "comment"],
+    [/<\/?[\w-]+(?:\s[^>]*)?\/?>/, "tag"],
+    [/"[^"]*"/, "string"], [/'[^']*'/, "string"],
+  ]},
+  css: { patterns: [
+    [/\/\*[\s\S]*?\*\//, "comment"],
+    [/@\w+(?:[^{};]*[;{])/, "atrule"],
+    [/\.?[\w-]+(?=\s*\{)/, "class-name"],
+    [/#[0-9a-fA-F]{3,8}\b/, "number"],
+    [/"[^"]*"/, "string"], [/'[^']*'/, "string"],
+  ]},
 };
-
-var LANG_ALIAS = {
-  javascript: "js", jsx: "js", mjs: "js", cjs: "js", es6: "js",
-  typescript: "js", tsx: "js", ts: "js",
-  python: "py", rust: "py", rs: "py", go: "py", java: "py", cpp: "py",
-  c: "py", csharp: "py", cs: "py", php: "py", ruby: "py", rb: "py",
-  swift: "py", kotlin: "py", kt: "py", scala: "py", dart: "py",
-  sql: "py", sh: "py", bash: "py", zsh: "py", shell: "py",
-  yaml: "py", yml: "py", toml: "py", ini: "py", json: "py",
-  md: "py", markdown: "py", text: "py", txt: "py",
-  html: "html", htm: "html", xhtml: "html", xml: "html", svg: "html",
-  css: "css", scss: "css", sass: "css", less: "css",
-};
-
-function resolveLang(name) {
-  return LANG_DEFS[name] || LANG_DEFS[LANG_ALIAS[name]] || null;
-}
-
-// 增量缓存
-var prevCode = null;
-var prevLines = [];
-
-// 逐行分词器
-function tokenizeLine(line, def, keywordSet) {
-  var tokens = [];
-  var pos = 0;
-
-  while (pos < line.length) {
-    var matched = false;
-
-    if (def.patterns) {
-      for (var pi = 0; pi < def.patterns.length; pi++) {
-        var pattern = def.patterns[pi];
-        var re = pattern[0];
-        var type = pattern[1];
-        re.lastIndex = 0;
-        var m = re.exec(line.substring(pos));
-        if (m && m.index === 0) {
-          tokens.push({ content: m[0], types: [type] });
-          pos += m[0].length;
-          matched = true;
-          break;
-        }
-      }
-      if (matched) continue;
-    }
-
-    var ch = line[pos];
-
-    if (/[a-zA-Z_]/.test(ch)) {
-      var word = "";
-      while (pos < line.length && /[a-zA-Z0-9_]/.test(line[pos])) { word += line[pos]; pos++; }
-      if (keywordSet[word]) {
-        tokens.push({ content: word, types: ["keyword"] });
-      } else {
-        if (line.substring(pos).trim().startsWith("(")) {
-          tokens.push({ content: word, types: ["function"] });
-        } else {
-          tokens.push({ content: word, types: [] });
-        }
-      }
-    }
-    else if (/\\d/.test(ch)) {
-      var num = "";
-      while (pos < line.length && /[0-9a-fA-F.xXbBoO]/.test(line[pos])) { num += line[pos]; pos++; }
-      tokens.push({ content: num, types: ["number"] });
-    }
-    else if (/["'\`]/.test(ch)) {
-      var quote = ch;
-      var str = quote;
-      pos++;
-      while (pos < line.length) {
-        if (line[pos] === "\\\\") { str += line[pos]; pos++; if (pos < line.length) { str += line[pos]; pos++; } }
-        else if (line[pos] === quote) { str += quote; pos++; break; }
-        else { str += line[pos]; pos++; }
-      }
-      tokens.push({ content: str, types: ["string"] });
-    }
-    else if (/[-+*\\/%=<>!&|^~?:]/.test(ch)) {
-      var op = ch;
-      pos++;
-      if (pos < line.length && /[-+*\\/%=<>!&|^~?]/.test(line[pos])) { op += line[pos]; pos++; }
-      if (pos < line.length && line[pos] === "=") { op += "="; pos++; }
-      tokens.push({ content: op, types: ["operator"] });
-    }
-    else if (/[{}[\\]();,.]/.test(ch)) {
-      tokens.push({ content: ch, types: ["punctuation"] });
-      pos++;
-    }
-    else {
-      tokens.push({ content: ch, types: [] });
-      pos++;
-    }
-  }
-  return tokens;
-}
+var LANG_ALIAS = { javascript:"js", jsx:"js", mjs:"js", cjs:"js", es6:"js", typescript:"js", tsx:"js", ts:"js", python:"py", rust:"rs", go:"go", java:"java", cpp:"cpp", c:"c", csharp:"cs", php:"php", ruby:"rb", swift:"swift", kotlin:"kt", scala:"scala", dart:"dart", sql:"sql", sh:"sh", bash:"bash", zsh:"zsh", shell:"sh", yaml:"yaml", yml:"yml", toml:"toml", ini:"ini", json:"json", md:"md", markdown:"md", text:"txt", txt:"txt", html:"html", htm:"html", xhtml:"html", xml:"html", svg:"html", css:"css", scss:"scss", sass:"sass", less:"less" };
+function resolveLang(n){return LANG_DEFS[n]||LANG_DEFS[LANG_ALIAS[n]]||null}
 
 onmessage = function(e) {
-  var data = e.data;
-  var code = data.code;
-  var language = data.language;
-  var id = data.id;
-
+  var data = e.data, code = data.code, lang = data.language, id = data.id, NL = "\n";
   try {
-    var def = resolveLang(language);
+    var def = resolveLang(lang), keywordSet = {};
     if (!def) {
-      var plain = code.split("\\n").map(function(l) { return l ? [{ content: l, types: [] }] : []; });
-      postMessage({ id: id, lines: plain, success: true });
+      var plain = code.split(NL).map(function(l){return l&&l.length?[{content:l,types:[]}]:[]});
+      postMessage({id:id, lines:plain, success:true});
       return;
     }
+    if (def.keywords) def.keywords.forEach(function(k){keywordSet[k]=true});
 
-    var keywordSet = {};
-    if (def.keywords) def.keywords.forEach(function(k) { keywordSet[k] = true; });
+    var lines = code.split(NL);
+    var resultLines = [];
 
-    var lines = code.split("\\n");
-
-    // === 增量分词：逐行对比，只处理新增或变化行 ===
-    var startIdx = 0;
-
-    if (prevCode) {
-      // 找到第一行不同的位置
-      for (var li = 0; li < prevLines.length && li < lines.length; li++) {
-        if (lines[li] !== prevCode.split("\n")[li]) {
-          startIdx = li;
-          break;
+    for (var li = 0; li < lines.length; li++) {
+      var line = lines[li], tokens = [], pos = 0;
+      while (pos < line.length) {
+        var ch = line[pos], matched = false;
+        if (def.patterns) {
+          for (var pi = 0; pi < def.patterns.length; pi++) {
+            var p = def.patterns[pi], re = p[0], type = p[1];
+            re.lastIndex = 0;
+            var m = re.exec(line.substring(pos));
+            if (m && m.index === 0) { tokens.push({content:m[0], types:[type]}); pos += m[0].length; matched = true; break; }
+          }
+          if (matched) continue;
         }
-        startIdx = li + 1; // 遍历到最后一行的下一格
+        if (/[a-zA-Z_]/.test(ch)) {
+          var word = "";
+          while (pos < line.length && /[a-zA-Z0-9_]/.test(line[pos])) { word += line[pos]; pos++; }
+          if (keywordSet[word]) tokens.push({content:word, types:["keyword"]});
+          else tokens.push({content:word, types: line.substring(pos).trim().startsWith("(") ? ["function"] : []});
+        } else if (/\d/.test(ch)) {
+          var num = "";
+          while (pos < line.length && /[0-9a-fA-F.xXbBoO]/.test(line[pos])) { num += line[pos]; pos++; }
+          tokens.push({content:num, types:["number"]});
+        } else if (/["'\`]/.test(ch)) {
+          var quote = ch, str = quote; pos++;
+          while (pos < line.length) {
+            if (line[pos] === "\\") { str += line[pos]; pos++; if (pos < line.length) { str += line[pos]; pos++; } }
+            else if (line[pos] === quote) { str += quote; pos++; break; }
+            else { str += line[pos]; pos++; }
+          }
+          tokens.push({content:str, types:["string"]});
+        } else if (/[-+*\/%=<>!&|^~?:]/.test(ch)) {
+          var op = ch; pos++;
+          if (pos < line.length && /[-+*\/%=<>!&|^~?]/.test(line[pos])) { op += line[pos]; pos++; }
+          if (pos < line.length && line[pos] === "=") { op += "="; pos++; }
+          tokens.push({content:op, types:["operator"]});
+        } else if (/[{}[\]();,.]/.test(ch)) { tokens.push({content:ch, types:["punctuation"]}); pos++; }
+        else { tokens.push({content:ch, types:[]}); pos++; }
       }
-      // 纯追加：已有行都没变
-      if (lines.length > prevLines.length && startIdx >= prevLines.length) {
-        startIdx = prevLines.length;
-      }
-      // 从 startIdx 开始重新分词
-      prevLines = prevLines.slice(0, startIdx);
-      for (var li = startIdx; li < lines.length; li++) {
-        prevLines.push(tokenizeLine(lines[li], def, keywordSet));
-      }
-    } else {
-      prevLines = [];
-      for (var li = 0; li < lines.length; li++) {
-        prevLines.push(tokenizeLine(lines[li], def, keywordSet));
-      }
+      resultLines.push(tokens);
     }
-    prevCode = code;
 
-    // 分块发送：只发送新增/变化的部分
     var CHUNK_SIZE = 1;
-    var sendFrom = startIdx;
-    for (var ci = sendFrom; ci < prevLines.length; ci += CHUNK_SIZE) {
-      var chunk = prevLines.slice(ci, ci + CHUNK_SIZE);
-      postMessage({ id: id, lines: chunk, offset: ci, success: true });
+    for (var ci = 0; ci < resultLines.length; ci += CHUNK_SIZE) {
+      postMessage({id:id, lines:resultLines.slice(ci,ci+CHUNK_SIZE), offset:ci, success:true});
     }
   } catch (err) {
-    var fallback = code.split("\\n").map(function(l) { return l ? [{ content: l, types: [] }] : []; });
-    var CHUNK_SIZE2 = 1;
-    for (var ci2 = 0; ci2 < fallback.length; ci2 += CHUNK_SIZE2) {
-      postMessage({ id: id, lines: fallback.slice(ci2, ci2 + CHUNK_SIZE2), offset: ci2, success: true });
+    var plain = code.split(NL).map(function(l){return [{content:l||" ",types:[]}]});
+    var cs = 1;
+    for (var c2 = 0; c2 < plain.length; c2 += cs) {
+      postMessage({id:id, lines:plain.slice(c2,c2+cs), offset:c2, success:true});
     }
   }
-};
-`;
+};`;
 
 function createWorker() {
   try {
@@ -325,7 +219,7 @@ export const CodeBlock = memo(function CodeBlock({
 
     workerRef.current = worker;
 
-    // 立即发送初始代码（静态加载场景）
+    // 立即发送初始代码
     if (code) {
       const id = performance.now();
       pendingIdRef.current = id;
@@ -338,7 +232,7 @@ export const CodeBlock = memo(function CodeBlock({
     };
   }, []);
 
-  // RAF 节流：每帧只发一次 Worker 请求
+  // RAF 节流
   const rafRef = useRef(0);
 
   useEffect(() => {
@@ -354,7 +248,7 @@ export const CodeBlock = memo(function CodeBlock({
     });
   });
 
-  // --- 渲染策略：三段式 ---
+  // --- 渲染 ---
   const codeLines = code.split('\n');
   const allLinesReady = workerLines && workerLines.length >= codeLines.length;
 
