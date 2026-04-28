@@ -16,12 +16,12 @@ export function Navbar({ title, isTitleLoading = false }: NavbarProps) {
     <nav className="bg-background w-full h-14">
       <div className="grid h-full w-full grid-cols-[auto_1fr_auto] items-center px-4">
         <SidebarTrigger className="h-8 w-8 cursor-pointer" />
-        <div className="justify-self-center transition-opacity duration-300 ease-out">
+        <div className="justify-self-stretch min-w-0 px-4 transition-opacity duration-300 ease-out">
           {isTitleLoading ? (
-            <Skeleton className="h-5 w-24 animate-in fade-in duration-300 ease-out" />
+            <Skeleton className="h-5 w-24 mx-auto animate-in fade-in duration-300 ease-out" />
           ) : (
             <h1
-              className="text-foreground animate-in fade-in duration-300 ease-out"
+              className="text-foreground truncate text-center animate-in fade-in duration-300 ease-out"
               title={displayTitle}
             >
               {displayTitle}

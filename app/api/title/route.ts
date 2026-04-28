@@ -20,13 +20,15 @@ export async function POST(req: Request) {
     });
 
     const title = text.trim();
+    // 兜底：超过15字则截取前15字加...
+    const safeTitle = title.length > 15 ? title.slice(0, 15) + '...' : title;
 
     // 入库
     await prisma.chat.upsert({
         where: { id: chatId },
-        update: { updatedAt: new Date(), title: title },
-        create: { id: chatId, title: title }
+        update: { updatedAt: new Date(), title: safeTitle },
+        create: { id: chatId, title: safeTitle }
     });
 
-    return NextResponse.json({ title });
+    return NextResponse.json({ title: safeTitle });
 }
