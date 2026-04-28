@@ -178,18 +178,28 @@ onmessage = function(e) {
 
     var lines = code.split("\\n");
 
-    // === 增量分词：只处理新增行 ===
-    var prevLineCount = prevLines.length;
-    var newCount = lines.length - prevLineCount;
-    var startIdx = prevLineCount;
+    // === 增量分词：逐行对比，只处理新增或变化行 ===
+    var startIdx = 0;
 
-    if (newCount > 0 && prevCode && code.indexOf(prevCode) === 0) {
-      // 代码是追加的 → 只算新行
+    if (prevCode) {
+      // 找到第一行不同的位置
+      for (var li = 0; li < prevLines.length && li < lines.length; li++) {
+        if (lines[li] !== prevCode.split("\n")[li]) {
+          startIdx = li;
+          break;
+        }
+        startIdx = li + 1; // 遍历到最后一行的下一格
+      }
+      // 纯追加：已有行都没变
+      if (lines.length > prevLines.length && startIdx >= prevLines.length) {
+        startIdx = prevLines.length;
+      }
+      // 从 startIdx 开始重新分词
+      prevLines = prevLines.slice(0, startIdx);
       for (var li = startIdx; li < lines.length; li++) {
         prevLines.push(tokenizeLine(lines[li], def, keywordSet));
       }
     } else {
-      // 代码变了（非追加）→ 全量重算
       prevLines = [];
       for (var li = 0; li < lines.length; li++) {
         prevLines.push(tokenizeLine(lines[li], def, keywordSet));
@@ -197,9 +207,9 @@ onmessage = function(e) {
     }
     prevCode = code;
 
-    // 分块发送：只发送实际新增/变化的部分
+    // 分块发送：只发送新增/变化的部分
     var CHUNK_SIZE = 1;
-    var sendFrom = prevLineCount > 0 ? startIdx : 0;
+    var sendFrom = startIdx;
     for (var ci = sendFrom; ci < prevLines.length; ci += CHUNK_SIZE) {
       var chunk = prevLines.slice(ci, ci + CHUNK_SIZE);
       postMessage({ id: id, lines: chunk, offset: ci, success: true });
