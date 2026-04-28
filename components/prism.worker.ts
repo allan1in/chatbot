@@ -172,9 +172,18 @@ onmessage = (e: MessageEvent) => {
       resultLines.push(tokens);
     }
 
-    postMessage({ id, lines: resultLines, success: true });
+    // 分块发送，每块 CHUNK_SIZE 行，避免单次 postMessage 触发大规模 React re-render
+    const CHUNK_SIZE = 3;
+    for (let i = 0; i < resultLines.length; i += CHUNK_SIZE) {
+      const chunk = resultLines.slice(i, i + CHUNK_SIZE);
+      postMessage({ id, lines: chunk, offset: i, success: true });
+    }
   } catch (err: any) {
     const fallback = code.split("\n").map((l: string) => l ? [{ content: l, types: [] } as Token] : []);
-    postMessage({ id, lines: fallback, success: true });
+    // fallback 也分块
+    const CHUNK_SIZE = 3;
+    for (let i = 0; i < fallback.length; i += CHUNK_SIZE) {
+      postMessage({ id, lines: fallback.slice(i, i + CHUNK_SIZE), offset: i, success: true });
+    }
   }
 };

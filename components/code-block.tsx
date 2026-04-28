@@ -71,7 +71,7 @@ export const CodeBlock = memo(function CodeBlock({
   const [workerLines, setWorkerLines] = useState<WorkerLine[] | null>(null);
   const workerRef = useRef<Worker | null>(null);
   const pendingIdRef = useRef(0);
-  const currentCodeRef = useRef(code);
+  const codeRef = useRef(code);
   const initAttempted = useRef(false);
 
   // 初始化 Worker（仅挂载时一次）
@@ -87,9 +87,16 @@ export const CodeBlock = memo(function CodeBlock({
       );
 
       worker.onmessage = (e: MessageEvent) => {
-        const { id, lines, success } = e.data;
+        const { id, lines, offset, success } = e.data;
         if (success && id === pendingIdRef.current) {
-          setWorkerLines(lines);
+          setWorkerLines(prev => {
+            const next = prev ? [...prev] : [];
+            while (next.length < offset + lines.length) next.push([]);
+            lines.forEach((line: WorkerLine, i: number) => {
+              next[offset + i] = line;
+            });
+            return next;
+          });
         }
       };
 
@@ -107,19 +114,23 @@ export const CodeBlock = memo(function CodeBlock({
     };
   }, []);
 
-  // 每次 code 变化时发送任务给 Worker
+  // RAF 节流：每帧只发一次 Worker 请求
+  // 流式过程中每次代码变化只节流到 60fps，Worker 在后台逐帧 tokenize
   const rafRef = useRef(0);
 
   useEffect(() => {
     if (!workerRef.current) return;
-    if (code === currentCodeRef.current) return;
-    currentCodeRef.current = code;
+    if (code === codeRef.current) return;
+    codeRef.current = code;
 
     cancelAnimationFrame(rafRef.current);
     rafRef.current = requestAnimationFrame(() => {
+      // 每次 RAF 发送最新完整代码给 Worker
+      // Worker 是后台线程，不影响主线程
+      // chunk 机制保证结果逐步到达，不会一次性大规模 re-render
       const id = performance.now();
       pendingIdRef.current = id;
-      workerRef.current?.postMessage({ code, language, id });
+      workerRef.current?.postMessage({ code: codeRef.current, language, id });
     });
   });
 
