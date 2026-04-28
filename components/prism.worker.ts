@@ -1,112 +1,180 @@
-// Web Worker: 在后台线程中运行 Prism 分词，不阻塞主线程
-// 接收主线程消息 { code, language, id }
-// 返回 { id, lines, success, error? }
+// 内联语法高亮 Worker — 无任何外部 import，Turbopack 打包无依赖
+// 使用 type: "module" 由 Turbopack 正确处理
 
-import Prism from "prismjs";
+const LANG_DEFS: Record<string, any> = {
+  js: {
+    keywords: "async await break case catch class const continue debugger default delete do else enum export extends finally for function if import in instanceof let new of return static super switch this throw try typeof var void while with yield".split(" "),
+    patterns: [
+      [/\/\/.*/, "comment"],
+      [/\/\*[\s\S]*?\*\//, "comment"],
+      [/"[^"]*"/, "string"],
+      [/`[^`]*`/, "string"],
+      [/'[^']*'/, "string"],
+      [/\b(0[xX][\da-f]+|0[bB][01]+|0[oO][0-7]+)\b/, "number"],
+      [/\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b/, "number"],
+    ],
+  },
+  py: {
+    keywords: "and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield".split(" "),
+    patterns: [
+      [/#.*/, "comment"],
+      [/"""/, "string"],
+      [/'''/, "string"],
+      [/"[^"]*"/, "string"],
+      [/'[^']*'/, "string"],
+      [/\b(0[xX][\da-f]+|0[bB][01]+|0[oO][0-7]+)\b/, "number"],
+      [/\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b/, "number"],
+      [/@\w+/, "decorator"],
+    ],
+  },
+  html: {
+    patterns: [
+      [/<!--[\s\S]*?-->/, "comment"],
+      [/<\/?[\w-]+(?:\s[^>]*)?\/?>/, "tag"],
+      [/"[^"]*"/, "string"],
+      [/'[^']*'/, "string"],
+    ],
+  },
+  css: {
+    patterns: [
+      [/\/\*[\s\S]*?\*\//, "comment"],
+      [/@\w+(?:[^{};]*[;{])/, "atrule"],
+      [/\.?[\w-]+(?=\s*\{)/, "class-name"],
+      [/#[0-9a-fA-F]{3,8}\b/, "number"],
+      [/"[^"]*"/, "string"],
+      [/'[^']*'/, "string"],
+    ],
+  },
+};
 
-// 预加载常用语言
-import "prismjs/components/prism-javascript";
-import "prismjs/components/prism-typescript";
-import "prismjs/components/prism-css";
-import "prismjs/components/prism-json";
-import "prismjs/components/prism-markup"; // HTML/SVG
-import "prismjs/components/prism-markdown";
-import "prismjs/components/prism-jsx";
-import "prismjs/components/prism-tsx";
-import "prismjs/components/prism-bash";
-import "prismjs/components/prism-python";
-import "prismjs/components/prism-sql";
-import "prismjs/components/prism-yaml";
-import "prismjs/components/prism-go";
-import "prismjs/components/prism-rust";
-import "prismjs/components/prism-java";
-import "prismjs/components/prism-cpp";
-import "prismjs/components/prism-csharp";
-import "prismjs/components/prism-php";
+const LANG_ALIAS: Record<string, string> = {
+  javascript: "js", jsx: "js", mjs: "js", cjs: "js", es6: "js",
+  typescript: "js", tsx: "js", ts: "js",
+  python: "py", rust: "py", rs: "py", go: "py", java: "py", cpp: "py",
+  c: "py", csharp: "py", cs: "py", php: "py", ruby: "py", rb: "py",
+  swift: "py", kotlin: "py", kt: "py", scala: "py", dart: "py",
+  sql: "py", sh: "py", bash: "py", zsh: "py", shell: "py",
+  yaml: "py", yml: "py", toml: "py", ini: "py", json: "py",
+  md: "py", markdown: "py", text: "py", txt: "py",
+  html: "html", htm: "html", xhtml: "html", xml: "html", svg: "html",
+  css: "css", scss: "css", sass: "css", less: "css",
+};
 
-// 展平后的 token 结构
-interface FlatToken {
+function resolveLang(name: string) {
+  return LANG_DEFS[name] || LANG_DEFS[LANG_ALIAS[name]] || null;
+}
+
+interface Token {
   content: string;
   types: string[];
 }
 
-// 递归展平 Prism token，支持嵌套 (alias 语言等)
-function flattenToken(
-  token: string | Prism.Token,
-  inheritedTypes: string[] = [],
-): FlatToken[] {
-  if (typeof token === "string") {
-    return token.length > 0 ? [{ content: token, types: inheritedTypes }] : [];
-  }
-
-  const types = [...inheritedTypes, token.type];
-  const result: FlatToken[] = [];
-
-  if (typeof token.content === "string") {
-    if (token.content.length > 0) {
-      result.push({ content: token.content, types });
-    }
-  } else if (Array.isArray(token.content)) {
-    for (const child of token.content) {
-      result.push(...flattenToken(child, types));
-    }
-  }
-
-  return result;
-}
-
-// 将展平的 token 数组按换行符拆分为行
-function splitToLines(tokens: FlatToken[]): FlatToken[][] {
-  const lines: FlatToken[][] = [];
-  let currentLine: FlatToken[] = [];
-
-  for (const token of tokens) {
-    const parts = token.content.split("\n");
-    for (let i = 0; i < parts.length; i++) {
-      if (i > 0) {
-        lines.push(currentLine);
-        currentLine = [];
-      }
-      currentLine.push({ content: parts[i], types: token.types });
-    }
-  }
-  lines.push(currentLine);
-
-  return lines;
-}
-
-self.onmessage = (e: MessageEvent) => {
+onmessage = (e: MessageEvent) => {
   const { code, language, id } = e.data;
 
   try {
-    const grammar = Prism.languages[language];
-    if (!grammar) {
-      // 没有对应语法时，直接返回原始文本
-      const lines: FlatToken[][] = code.split("\n").map((line: string) =>
-        line.length > 0 ? [{ content: line, types: [] }] : [],
-      );
-      self.postMessage({ id, lines, success: true });
+    const def = resolveLang(language);
+    if (!def) {
+      const plain = code.split("\n").map((l: string) => l ? [{ content: l, types: [] } as Token] : []);
+      postMessage({ id, lines: plain, success: true });
       return;
     }
 
-    // Prism.tokenize 是纯同步操作，放在 Worker 里跑就不会阻塞主线程
-    const rawTokens = Prism.tokenize(code, grammar);
+    const keywordSet: Record<string, boolean> = {};
+    if (def.keywords) def.keywords.forEach((k: string) => { keywordSet[k] = true; });
 
-    // 递归展平
-    const flat: FlatToken[] = [];
-    for (const token of rawTokens) {
-      flat.push(...flattenToken(token));
+    const lines = code.split("\n");
+    const resultLines: Token[][] = [];
+
+    for (const line of lines) {
+      const tokens: Token[] = [];
+      let pos = 0;
+
+      while (pos < line.length) {
+        let matched = false;
+
+        // Try regex patterns first
+        if (def.patterns) {
+          for (const [re, type] of def.patterns) {
+            (re as RegExp).lastIndex = 0;
+            const m = (re as RegExp).exec(line.substring(pos));
+            if (m && m.index === 0) {
+              tokens.push({ content: m[0], types: [type as string] });
+              pos += m[0].length;
+              matched = true;
+              break;
+            }
+          }
+          if (matched) continue;
+        }
+
+        const ch = line[pos];
+
+        // Word
+        if (/[a-zA-Z_]/.test(ch)) {
+          let word = "";
+          while (pos < line.length && /[a-zA-Z0-9_]/.test(line[pos])) {
+            word += line[pos];
+            pos++;
+          }
+          if (keywordSet[word]) {
+            tokens.push({ content: word, types: ["keyword"] });
+          } else {
+            // Check if followed by ( → function
+            if (line.substring(pos).trim().startsWith("(")) {
+              tokens.push({ content: word, types: ["function"] });
+            } else {
+              tokens.push({ content: word, types: [] });
+            }
+          }
+        }
+        // Number
+        else if (/\d/.test(ch)) {
+          let num = "";
+          while (pos < line.length && /[0-9a-fA-F.xXbBoO]/.test(line[pos])) {
+            num += line[pos];
+            pos++;
+          }
+          tokens.push({ content: num, types: ["number"] });
+        }
+        // String (already handled by patterns, but catch edge cases)
+        else if (/["'`]/.test(ch)) {
+          const quote = ch;
+          let str = quote;
+          pos++;
+          while (pos < line.length) {
+            if (line[pos] === "\\") { str += line[pos]; pos++; if (pos < line.length) { str += line[pos]; pos++; } }
+            else if (line[pos] === quote) { str += quote; pos++; break; }
+            else { str += line[pos]; pos++; }
+          }
+          tokens.push({ content: str, types: ["string"] });
+        }
+        // Operator
+        else if (/[-+*\/%=<>!&|^~?:]/.test(ch)) {
+          let op = ch;
+          pos++;
+          if (pos < line.length && /[-+*\/%=<>!&|^~?]/.test(line[pos])) { op += line[pos]; pos++; }
+          if (pos < line.length && line[pos] === "=") { op += "="; pos++; }
+          tokens.push({ content: op, types: ["operator"] });
+        }
+        // Punctuation
+        else if (/[{}[\]();,.]/.test(ch)) {
+          tokens.push({ content: ch, types: ["punctuation"] });
+          pos++;
+        }
+        // Whitespace and others
+        else {
+          tokens.push({ content: ch, types: [] });
+          pos++;
+        }
+      }
+
+      resultLines.push(tokens);
     }
 
-    // 按行分割
-    const lines = splitToLines(flat);
-
-    self.postMessage({ id, lines, success: true });
-  } catch (error: any) {
-    self.postMessage({
-      id,
-      error: error.message || String(error),
-      success: false,
-    });
+    postMessage({ id, lines: resultLines, success: true });
+  } catch (err: any) {
+    const fallback = code.split("\n").map((l: string) => l ? [{ content: l, types: [] } as Token] : []);
+    postMessage({ id, lines: fallback, success: true });
   }
 };
