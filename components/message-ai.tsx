@@ -1,11 +1,12 @@
 "use client";
 
+import { memo } from "react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import { markdownComponents } from "./markdown-components";
 import { ToggleCopy } from "./toggle-copy";
 
-export function MessageAI({
+export const MessageAI = memo(function MessageAI({
   className,
   message,
   minHeight,
@@ -14,7 +15,6 @@ export function MessageAI({
   message?: string;
   minHeight?: number;
 }) {
-
   return (
     <div
       className={cn(
@@ -40,4 +40,4 @@ export function MessageAI({
       </div>
     </div>
   );
-}
+});

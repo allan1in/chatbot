@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html><body>
+<h2>Worker 高亮测试</h2>
+<pre id="output" style="background:#1e1e1e;color:#d4d4d4;padding:10px;border-radius:4px;font-family:monospace;font-size:13px;line-height:1.5;overflow:auto;max-height:600px;"></pre>
+<button onclick="testWorker()">测试 Worker</button>
+<button onclick="testDirect()">直接分词（不经过Worker）</button>
+<div id="status"></div>
+<script>
+// 从 code-block.tsx 复制 WORKER_SOURCE
+const WORKER_SOURCE = `
+const LANG_DEFS = {
+  js: {
+    keywords: "async await break case catch class const continue debugger default delete do else enum export extends finally for function if import in instanceof let new of return static super switch this throw try typeof var void while with yield".split(" "),
+    patterns: [
+      [/\\/\\/.*/, "comment"],
+      [/\\/\\*[\\s\\S]*?\\*\\//, "comment"],
+      [/"[^"]*"/, "string"],
+      [/\`[^\`]*\`/, "string"],
+      [/'[^']*'/, "string"],
+      [/\\b(0[xX][\\da-f]+|0[bB][01]+|0[oO][0-7]+)\\b/, "number"],
+      [/\\b\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b/, "number"],
+    ],
+  },
+  py: {
+    keywords: "and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield".split(" "),
+    patterns: [
+      [/#.*/, "comment"],
+      [/"""/, "string"],
+      [/'''/, "string"],
+      [/"[^"]*"/, "string"],
+      [/'[^']*'/, "string"],
+      [/\\b(0[xX][\\da-f]+|0[bB][01]+|0[oO][0-7]+)\\b/, "number"],
+      [/\\b\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b/, "number"],
+      [/@\\w+/, "decorator"],
+    ],
+  },
+  html: {
+    patterns: [
+      [/<!--[\\s\\S]*?-->/, "comment"],
+      [/<\\/?[\\w-]+(?:\\s[^>]*)?\\/?>/, "tag"],
+      [/"[^"]*"/, "string"],
+      [/'[^']*'/, "string"],
+    ],
+  },
+};
+var LANG_ALIAS = { javascript: "js", typescript: "js", python: "py", html: "html", css: "css" };
+function resolveLang(name) { return LANG_DEFS[name] || LANG_DEFS[LANG_ALIAS[name]] || null; }
+
+onmessage = function(e) {
+  var data = e.data;
+  var code = data.code;
+  var language = data.language;
+  var id = data.id;
+  
+  try {
+    var def = resolveLang(language);
+    if (!def) {
+      var plain = code.split("\\n").map(function(l) { return l ? [{ content: l, types: [] }] : []; });
+      postMessage({ id: id, lines: plain, success: true });
+      return;
+    }
+
+    var keywordSet = {};
+    if (def.keywords) def.keywords.forEach(function(k) { keywordSet[k] = true; });
+
+    // 关键测试：split 是否正常工作
+    var lines = code.split("\\n");
+    var lineCount = lines.length;
+    postMessage({ id: id, log: "split yielded " + lineCount + " lines, first: " + lines[0].substring(0,30) });
+
+    var resultLines = [];
+    for (var li = 0; li < lines.length; li++) {
+      var line = lines[li];
+      var tokens = [];
+      var pos = 0;
+      while (pos < line.length) {
+        var matched = false;
+        if (def.patterns) {
+          for (var pi = 0; pi < def.patterns.length; pi++) {
+            var pattern = def.patterns[pi];
+            var re = pattern[0];
+            var type = pattern[1];
+            re.lastIndex = 0;
+            var m = re.exec(line.substring(pos));
+            if (m && m.index === 0) {
+              tokens.push({ content: m[0], types: [type] });
+              pos += m[0].length;
+              matched = true;
+              break;
+            }
+          }
+          if (matched) continue;
+        }
+        var ch = line[pos];
+        if (/[a-zA-Z_]/.test(ch)) {
+          var word = "";
+          while (pos < line.length && /[a-zA-Z0-9_]/.test(line[pos])) { word += line[pos]; pos++; }
+          if (keywordSet[word]) tokens.push({ content: word, types: ["keyword"] });
+          else tokens.push({ content: word, types: line.substring(pos).trim().startsWith("(") ? ["function"] : [] });
+        } else if (/\\d/.test(ch)) {
+          var num = "";
+          while (pos < line.length && /[0-9a-fA-F.xXbBoO]/.test(line[pos])) { num += line[pos]; pos++; }
+          tokens.push({ content: num, types: ["number"] });
+        } else if (/["'\`]/.test(ch)) {
+          var quote = ch; var str = quote; pos++;
+          while (pos < line.length) { if (line[pos] === "\\\\") { str += line[pos]; pos++; if (pos < line.length) { str += line[pos]; pos++; } } else if (line[pos] === quote) { str += quote; pos++; break; } else { str += line[pos]; pos++; } }
+          tokens.push({ content: str, types: ["string"] });
+        } else if (/[-+*\\/%=<>!&|^~?:]/.test(ch)) {
+          var op = ch; pos++;
+          if (pos < line.length && /[-+*\\/%=<>!&|^~?]/.test(line[pos])) { op += line[pos]; pos++; }
+          if (pos < line.length && line[pos] === "=") { op += "="; pos++; }
+          tokens.push({ content: op, types: ["operator"] });
+        } else if (/[{}[\\]();,.]/.test(ch)) { tokens.push({ content: ch, types: ["punctuation"] }); pos++; }
+        else { tokens.push({ content: ch, types: [] }); pos++; }
+      }
+      resultLines.push(tokens);
+    }
+    
+    postMessage({ id: id, lines: resultLines, success: true, totalLines: resultLines.length });
+  } catch (err) {
+    postMessage({ id: id, error: err.message });
+  }
+};
+`;
+
+function log(msg) {
+  var el = document.getElementById('output');
+  el.textContent += msg + '\\n';
+}
+function status(msg) {
+  document.getElementById('status').textContent = msg;
+}
+
+function testWorker() {
+  log('=== Worker 测试 ===');
+  var blob = new Blob([WORKER_SOURCE], {type:'application/javascript'});
+  var url = URL.createObjectURL(blob);
+  var worker = new Worker(url);
+  
+  worker.onmessage = function(e) {
+    var d = e.data;
+    if (d.log) { log('LOG: ' + d.log); }
+    if (d.error) { log('ERROR: ' + d.error); }
+    if (d.lines) {
+      log('成功! ' + d.totalLines + ' 行, 共 ' + d.lines.reduce(function(a,l){return a+l.length;},0) + ' 个 token');
+      // 显示前5行
+      for (var i = 0; i < Math.min(5, d.lines.length); i++) {
+        var lineStr = d.lines[i].map(function(t){return t.types.length ? t.content+'['+t.types[0]+']' : t.content;}).join(' ');
+        log('  L' + i + ': ' + lineStr.substring(0,80));
+      }
+    }
+  };
+  worker.onerror = function(e) { log('WORKER ERROR: ' + e.message); status('FAILED'); };
+  
+  var testCode = '# 测试评论\\ndef hello(name):\\n    """文档字符串"""\\n    print(f"Hello {name}")\\n\\nhello("world")';
+  log('测试代码:\\n' + testCode + '\\n---');
+  worker.postMessage({code: testCode, language: 'py', id: 1});
+  status('Worker 已发送消息');
+}
+
+function testDirect() {
+  log('=== 直接分词测试 ===');
+  var testCode = 'def hello():\\n    print("hi")\\nhello()';
+  log('测试代码行数: ' + testCode.split('\\n').length);
+  log('实际换行符位置: ' + testCode.indexOf('\\n'));
+}
+</script>
+</body></html>

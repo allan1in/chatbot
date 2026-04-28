@@ -6,7 +6,7 @@ import { MessageUser } from "@/components/message-user";
 import { ErrorMessage } from "@/components/error-message";
 import { UIMessage, UIDataTypes, UITools } from "ai";
 import { cn } from "@/lib/utils";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useMemo } from "react";
 
 interface ChatGroup {
   id: string;
@@ -27,7 +27,7 @@ export default function MessageList({
   className?: string;
   loading?: boolean;
 }) {
-  const groups = messages.reduce<ChatGroup[]>((acc, message) => {
+  const groups = useMemo(() => messages.reduce<ChatGroup[]>((acc, message) => {
     if (message.role === "user") {
       acc.push({ id: message.id, user: message });
     } else if (message.role === "assistant") {
@@ -37,7 +37,7 @@ export default function MessageList({
       }
     }
     return acc;
-  }, []);
+  }, []), [messages]);
 
   function isGroupLoading(index: number) {
     const isLastGroup = index === groups.length - 1;
