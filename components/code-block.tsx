@@ -14,6 +14,210 @@ interface WorkerToken {
 type WorkerLine = WorkerToken[];
 
 // ============================================================
+// Worker 代码（内联，Blob URL 加载，避免 Next.js 编译问题）
+// ============================================================
+const WORKER_SOURCE = `
+const LANG_DEFS = {
+  js: {
+    keywords: "async await break case catch class const continue debugger default delete do else enum export extends finally for function if import in instanceof let new of return static super switch this throw try typeof var void while with yield".split(" "),
+    patterns: [
+      [/\\/\\/.*/, "comment"],
+      [/\\/\\*[\\s\\S]*?\\*\\//, "comment"],
+      [/"[^"]*"/, "string"],
+      [/\`[^\`]*\`/, "string"],
+      [/'[^']*'/, "string"],
+      [/\\b(0[xX][\\da-f]+|0[bB][01]+|0[oO][0-7]+)\\b/, "number"],
+      [/\\b\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b/, "number"],
+    ],
+  },
+  py: {
+    keywords: "and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield".split(" "),
+    patterns: [
+      [/#.*/, "comment"],
+      [/"""/, "string"],
+      [/'''/, "string"],
+      [/"[^"]*"/, "string"],
+      [/'[^']*'/, "string"],
+      [/\\b(0[xX][\\da-f]+|0[bB][01]+|0[oO][0-7]+)\\b/, "number"],
+      [/\\b\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b/, "number"],
+      [/@\\w+/, "decorator"],
+    ],
+  },
+  html: {
+    patterns: [
+      [/<!--[\\s\\S]*?-->/, "comment"],
+      [/<\\/?[\\w-]+(?:\\s[^>]*)?\\/?>/, "tag"],
+      [/"[^"]*"/, "string"],
+      [/'[^']*'/, "string"],
+    ],
+  },
+  css: {
+    patterns: [
+      [/\\/\\*[\\s\\S]*?\\*\\//, "comment"],
+      [/@\\w+(?:[^{};]*[;{])/, "atrule"],
+      [/\\.?[\\w-]+(?=\\s*\\{)/, "class-name"],
+      [/#[0-9a-fA-F]{3,8}\\b/, "number"],
+      [/"[^"]*"/, "string"],
+      [/'[^']*'/, "string"],
+    ],
+  },
+};
+
+var LANG_ALIAS = {
+  javascript: "js", jsx: "js", mjs: "js", cjs: "js", es6: "js",
+  typescript: "js", tsx: "js", ts: "js",
+  python: "py", rust: "py", rs: "py", go: "py", java: "py", cpp: "py",
+  c: "py", csharp: "py", cs: "py", php: "py", ruby: "py", rb: "py",
+  swift: "py", kotlin: "py", kt: "py", scala: "py", dart: "py",
+  sql: "py", sh: "py", bash: "py", zsh: "py", shell: "py",
+  yaml: "py", yml: "py", toml: "py", ini: "py", json: "py",
+  md: "py", markdown: "py", text: "py", txt: "py",
+  html: "html", htm: "html", xhtml: "html", xml: "html", svg: "html",
+  css: "css", scss: "css", sass: "css", less: "css",
+};
+
+function resolveLang(name) {
+  return LANG_DEFS[name] || LANG_DEFS[LANG_ALIAS[name]] || null;
+}
+
+onmessage = function(e) {
+  var data = e.data;
+  var code = data.code;
+  var language = data.language;
+  var id = data.id;
+
+  try {
+    var def = resolveLang(language);
+    if (!def) {
+      var plain = code.split("\\n").map(function(l) { return l ? [{ content: l, types: [] }] : []; });
+      postMessage({ id: id, lines: plain, success: true });
+      return;
+    }
+
+    var keywordSet = {};
+    if (def.keywords) def.keywords.forEach(function(k) { keywordSet[k] = true; });
+
+    var lines = code.split("\\n");
+    var resultLines = [];
+
+    for (var li = 0; li < lines.length; li++) {
+      var line = lines[li];
+      var tokens = [];
+      var pos = 0;
+
+      while (pos < line.length) {
+        var matched = false;
+
+        // Try regex patterns first
+        if (def.patterns) {
+          for (var pi = 0; pi < def.patterns.length; pi++) {
+            var pattern = def.patterns[pi];
+            var re = pattern[0];
+            var type = pattern[1];
+            re.lastIndex = 0;
+            var m = re.exec(line.substring(pos));
+            if (m && m.index === 0) {
+              tokens.push({ content: m[0], types: [type] });
+              pos += m[0].length;
+              matched = true;
+              break;
+            }
+          }
+          if (matched) continue;
+        }
+
+        var ch = line[pos];
+
+        // Word
+        if (/[a-zA-Z_]/.test(ch)) {
+          var word = "";
+          while (pos < line.length && /[a-zA-Z0-9_]/.test(line[pos])) {
+            word += line[pos];
+            pos++;
+          }
+          if (keywordSet[word]) {
+            tokens.push({ content: word, types: ["keyword"] });
+          } else {
+            // Check if followed by ( → function
+            if (line.substring(pos).trim().startsWith("(")) {
+              tokens.push({ content: word, types: ["function"] });
+            } else {
+              tokens.push({ content: word, types: [] });
+            }
+          }
+        }
+        // Number
+        else if (/\\d/.test(ch)) {
+          var num = "";
+          while (pos < line.length && /[0-9a-fA-F.xXbBoO]/.test(line[pos])) {
+            num += line[pos];
+            pos++;
+          }
+          tokens.push({ content: num, types: ["number"] });
+        }
+        // String edge case
+        else if (/["'\`]/.test(ch)) {
+          var quote = ch;
+          var str = quote;
+          pos++;
+          while (pos < line.length) {
+            if (line[pos] === "\\\\") { str += line[pos]; pos++; if (pos < line.length) { str += line[pos]; pos++; } }
+            else if (line[pos] === quote) { str += quote; pos++; break; }
+            else { str += line[pos]; pos++; }
+          }
+          tokens.push({ content: str, types: ["string"] });
+        }
+        // Operator
+        else if (/[-+*\\/%=<>!&|^~?:]/.test(ch)) {
+          var op = ch;
+          pos++;
+          if (pos < line.length && /[-+*\\/%=<>!&|^~?]/.test(line[pos])) { op += line[pos]; pos++; }
+          if (pos < line.length && line[pos] === "=") { op += "="; pos++; }
+          tokens.push({ content: op, types: ["operator"] });
+        }
+        // Punctuation
+        else if (/[{}[\\]();,.]/.test(ch)) {
+          tokens.push({ content: ch, types: ["punctuation"] });
+          pos++;
+        }
+        // Whitespace and others
+        else {
+          tokens.push({ content: ch, types: [] });
+          pos++;
+        }
+      }
+
+      resultLines.push(tokens);
+    }
+
+    // 分块发送
+    var CHUNK_SIZE = 3;
+    for (var ci = 0; ci < resultLines.length; ci += CHUNK_SIZE) {
+      var chunk = resultLines.slice(ci, ci + CHUNK_SIZE);
+      postMessage({ id: id, lines: chunk, offset: ci, success: true });
+    }
+  } catch (err) {
+    var fallback = code.split("\\n").map(function(l) { return l ? [{ content: l, types: [] }] : []; });
+    var CHUNK_SIZE2 = 3;
+    for (var ci2 = 0; ci2 < fallback.length; ci2 += CHUNK_SIZE2) {
+      postMessage({ id: id, lines: fallback.slice(ci2, ci2 + CHUNK_SIZE2), offset: ci2, success: true });
+    }
+  }
+};
+`;
+
+function createWorker() {
+  try {
+    const blob = new Blob([WORKER_SOURCE], { type: "application/javascript" });
+    const url = URL.createObjectURL(blob);
+    const worker = new Worker(url);
+    return worker;
+  } catch {
+    return null;
+  }
+}
+
+// ============================================================
 // oneDark 主题色映射
 // ============================================================
 const DEFAULT_COLOR = "hsl(220, 14%, 71%)";
@@ -71,7 +275,7 @@ export const CodeBlock = memo(function CodeBlock({
   const [workerLines, setWorkerLines] = useState<WorkerLine[] | null>(null);
   const workerRef = useRef<Worker | null>(null);
   const pendingIdRef = useRef(0);
-  const codeRef = useRef(code);
+  const codeRef = useRef('');
   const initAttempted = useRef(false);
 
   // 初始化 Worker（仅挂载时一次）
@@ -79,35 +283,37 @@ export const CodeBlock = memo(function CodeBlock({
     if (initAttempted.current) return;
     initAttempted.current = true;
 
-    let worker: Worker | null = null;
-    try {
-      worker = new Worker(
-        new URL("./prism.worker.ts", import.meta.url),
-        { type: "module" },
-      );
+    const worker = createWorker();
+    if (!worker) return;
 
-      worker.onmessage = (e: MessageEvent) => {
-        const { id, lines, offset, success } = e.data;
-        if (success && id === pendingIdRef.current) {
-          setWorkerLines(prev => {
-            const next = prev ? [...prev] : [];
-            while (next.length < offset + lines.length) next.push([]);
-            lines.forEach((line: WorkerLine, i: number) => {
-              next[offset + i] = line;
-            });
-            return next;
+    worker.onmessage = (e: MessageEvent) => {
+      const { id, lines, offset, success } = e.data;
+      if (success && id === pendingIdRef.current) {
+        setWorkerLines(prev => {
+          const next = prev ? [...prev] : [];
+          while (next.length < offset + lines.length) next.push([]);
+          lines.forEach((line: WorkerLine, i: number) => {
+            next[offset + i] = line;
           });
-        }
-      };
+          return next;
+        });
+      }
+    };
 
-      worker.onerror = () => {
-        worker?.terminate();
-        workerRef.current = null;
-      };
-    } catch {
-      worker = null;
-    }
+    worker.onerror = () => {
+      worker?.terminate();
+      workerRef.current = null;
+    };
+
     workerRef.current = worker;
+
+    // 立即发送初始代码（静态加载场景）
+    if (code) {
+      const id = performance.now();
+      pendingIdRef.current = id;
+      codeRef.current = code;
+      worker.postMessage({ code, language, id });
+    }
 
     return () => {
       worker?.terminate();
@@ -131,16 +337,13 @@ export const CodeBlock = memo(function CodeBlock({
   });
 
   // --- 渲染策略：三段式 ---
-  // 1. Worker 还没结果 → 纯文本（单文本节点，最快）
-  // 2. Worker 覆盖了全部行 → 全高亮（workerLines.map，无 code.split 开销）
-  // 3. 过渡期（部分行未处理）→ 混合渲染
   const codeLines = code.split('\n');
   const allLinesReady = workerLines && workerLines.length >= codeLines.length;
 
   const codeContent = !workerLines
-    ? code  // 场景 1：纯文本 text node
+    ? code
     : allLinesReady
-    ? workerLines.map((line, i) => (  // 场景 2：全高亮，无 code.split 比较
+    ? workerLines.map((line, i) => (
         <div key={i}>
           {line.length > 0
             ? line.map((token, j) => (
@@ -151,7 +354,7 @@ export const CodeBlock = memo(function CodeBlock({
             : '\u00A0'}
         </div>
       ))
-    : codeLines.map((line, i) => {  // 场景 3：混合（过渡期短暂存在）
+    : codeLines.map((line, i) => {
         const tokens = workerLines[i];
         if (tokens && tokens.length > 0) {
           return (
