@@ -80,6 +80,85 @@ function resolveLang(name) {
   return LANG_DEFS[name] || LANG_DEFS[LANG_ALIAS[name]] || null;
 }
 
+// 增量缓存
+var prevCode = null;
+var prevLines = [];
+
+// 逐行分词器
+function tokenizeLine(line, def, keywordSet) {
+  var tokens = [];
+  var pos = 0;
+
+  while (pos < line.length) {
+    var matched = false;
+
+    if (def.patterns) {
+      for (var pi = 0; pi < def.patterns.length; pi++) {
+        var pattern = def.patterns[pi];
+        var re = pattern[0];
+        var type = pattern[1];
+        re.lastIndex = 0;
+        var m = re.exec(line.substring(pos));
+        if (m && m.index === 0) {
+          tokens.push({ content: m[0], types: [type] });
+          pos += m[0].length;
+          matched = true;
+          break;
+        }
+      }
+      if (matched) continue;
+    }
+
+    var ch = line[pos];
+
+    if (/[a-zA-Z_]/.test(ch)) {
+      var word = "";
+      while (pos < line.length && /[a-zA-Z0-9_]/.test(line[pos])) { word += line[pos]; pos++; }
+      if (keywordSet[word]) {
+        tokens.push({ content: word, types: ["keyword"] });
+      } else {
+        if (line.substring(pos).trim().startsWith("(")) {
+          tokens.push({ content: word, types: ["function"] });
+        } else {
+          tokens.push({ content: word, types: [] });
+        }
+      }
+    }
+    else if (/\\d/.test(ch)) {
+      var num = "";
+      while (pos < line.length && /[0-9a-fA-F.xXbBoO]/.test(line[pos])) { num += line[pos]; pos++; }
+      tokens.push({ content: num, types: ["number"] });
+    }
+    else if (/["'\`]/.test(ch)) {
+      var quote = ch;
+      var str = quote;
+      pos++;
+      while (pos < line.length) {
+        if (line[pos] === "\\\\") { str += line[pos]; pos++; if (pos < line.length) { str += line[pos]; pos++; } }
+        else if (line[pos] === quote) { str += quote; pos++; break; }
+        else { str += line[pos]; pos++; }
+      }
+      tokens.push({ content: str, types: ["string"] });
+    }
+    else if (/[-+*\\/%=<>!&|^~?:]/.test(ch)) {
+      var op = ch;
+      pos++;
+      if (pos < line.length && /[-+*\\/%=<>!&|^~?]/.test(line[pos])) { op += line[pos]; pos++; }
+      if (pos < line.length && line[pos] === "=") { op += "="; pos++; }
+      tokens.push({ content: op, types: ["operator"] });
+    }
+    else if (/[{}[\\]();,.]/.test(ch)) {
+      tokens.push({ content: ch, types: ["punctuation"] });
+      pos++;
+    }
+    else {
+      tokens.push({ content: ch, types: [] });
+      pos++;
+    }
+  }
+  return tokens;
+}
+
 onmessage = function(e) {
   var data = e.data;
   var code = data.code;
@@ -98,107 +177,36 @@ onmessage = function(e) {
     if (def.keywords) def.keywords.forEach(function(k) { keywordSet[k] = true; });
 
     var lines = code.split("\\n");
-    var resultLines = [];
 
-    for (var li = 0; li < lines.length; li++) {
-      var line = lines[li];
-      var tokens = [];
-      var pos = 0;
+    // === 增量分词：只处理新增行 ===
+    var prevLineCount = prevLines.length;
+    var newCount = lines.length - prevLineCount;
+    var startIdx = prevLineCount;
 
-      while (pos < line.length) {
-        var matched = false;
-
-        // Try regex patterns first
-        if (def.patterns) {
-          for (var pi = 0; pi < def.patterns.length; pi++) {
-            var pattern = def.patterns[pi];
-            var re = pattern[0];
-            var type = pattern[1];
-            re.lastIndex = 0;
-            var m = re.exec(line.substring(pos));
-            if (m && m.index === 0) {
-              tokens.push({ content: m[0], types: [type] });
-              pos += m[0].length;
-              matched = true;
-              break;
-            }
-          }
-          if (matched) continue;
-        }
-
-        var ch = line[pos];
-
-        // Word
-        if (/[a-zA-Z_]/.test(ch)) {
-          var word = "";
-          while (pos < line.length && /[a-zA-Z0-9_]/.test(line[pos])) {
-            word += line[pos];
-            pos++;
-          }
-          if (keywordSet[word]) {
-            tokens.push({ content: word, types: ["keyword"] });
-          } else {
-            // Check if followed by ( → function
-            if (line.substring(pos).trim().startsWith("(")) {
-              tokens.push({ content: word, types: ["function"] });
-            } else {
-              tokens.push({ content: word, types: [] });
-            }
-          }
-        }
-        // Number
-        else if (/\\d/.test(ch)) {
-          var num = "";
-          while (pos < line.length && /[0-9a-fA-F.xXbBoO]/.test(line[pos])) {
-            num += line[pos];
-            pos++;
-          }
-          tokens.push({ content: num, types: ["number"] });
-        }
-        // String edge case
-        else if (/["'\`]/.test(ch)) {
-          var quote = ch;
-          var str = quote;
-          pos++;
-          while (pos < line.length) {
-            if (line[pos] === "\\\\") { str += line[pos]; pos++; if (pos < line.length) { str += line[pos]; pos++; } }
-            else if (line[pos] === quote) { str += quote; pos++; break; }
-            else { str += line[pos]; pos++; }
-          }
-          tokens.push({ content: str, types: ["string"] });
-        }
-        // Operator
-        else if (/[-+*\\/%=<>!&|^~?:]/.test(ch)) {
-          var op = ch;
-          pos++;
-          if (pos < line.length && /[-+*\\/%=<>!&|^~?]/.test(line[pos])) { op += line[pos]; pos++; }
-          if (pos < line.length && line[pos] === "=") { op += "="; pos++; }
-          tokens.push({ content: op, types: ["operator"] });
-        }
-        // Punctuation
-        else if (/[{}[\\]();,.]/.test(ch)) {
-          tokens.push({ content: ch, types: ["punctuation"] });
-          pos++;
-        }
-        // Whitespace and others
-        else {
-          tokens.push({ content: ch, types: [] });
-          pos++;
-        }
+    if (newCount > 0 && prevCode && code.indexOf(prevCode) === 0) {
+      // 代码是追加的 → 只算新行
+      for (var li = startIdx; li < lines.length; li++) {
+        prevLines.push(tokenizeLine(lines[li], def, keywordSet));
       }
-
-      resultLines.push(tokens);
+    } else {
+      // 代码变了（非追加）→ 全量重算
+      prevLines = [];
+      for (var li = 0; li < lines.length; li++) {
+        prevLines.push(tokenizeLine(lines[li], def, keywordSet));
+      }
     }
+    prevCode = code;
 
-    // 分块发送
-    var CHUNK_SIZE = 3;
-    for (var ci = 0; ci < resultLines.length; ci += CHUNK_SIZE) {
-      var chunk = resultLines.slice(ci, ci + CHUNK_SIZE);
+    // 分块发送：只发送实际新增/变化的部分
+    var CHUNK_SIZE = 1;
+    var sendFrom = prevLineCount > 0 ? startIdx : 0;
+    for (var ci = sendFrom; ci < prevLines.length; ci += CHUNK_SIZE) {
+      var chunk = prevLines.slice(ci, ci + CHUNK_SIZE);
       postMessage({ id: id, lines: chunk, offset: ci, success: true });
     }
   } catch (err) {
     var fallback = code.split("\\n").map(function(l) { return l ? [{ content: l, types: [] }] : []; });
-    var CHUNK_SIZE2 = 3;
+    var CHUNK_SIZE2 = 1;
     for (var ci2 = 0; ci2 < fallback.length; ci2 += CHUNK_SIZE2) {
       postMessage({ id: id, lines: fallback.slice(ci2, ci2 + CHUNK_SIZE2), offset: ci2, success: true });
     }
