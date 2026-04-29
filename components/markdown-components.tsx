@@ -1,7 +1,5 @@
 import { ToggleCopy } from "./toggle-copy";
 import { ReactNode } from "react";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 type HeadingProps = React.HTMLAttributes<HTMLHeadingElement>;
 type ParagraphProps = React.HTMLAttributes<HTMLParagraphElement>;
@@ -47,22 +45,9 @@ export const markdownComponents = {
           />
         </div>
         
-        {/* <pre className="p-4 overflow-x-auto text-sm font-mono leading-relaxed scrollbar-thin" {...props}>
+        <pre className="p-4 overflow-x-auto text-sm font-mono leading-relaxed scrollbar-thin" {...props}>
           <code>{codeString}</code>
-        </pre> */}
-        <SyntaxHighlighter
-          language={match[1]}
-          style={oneDark}
-          PreTag="div"
-          customStyle={{
-            margin: 0,
-            padding: '1rem',
-            fontSize: '0.875rem',
-            background: 'transparent',
-          }}
-        >
-          {codeString}
-        </SyntaxHighlighter>
+        </pre>
       </div>
     ) : (
       <code className="bg-muted px-1.5 py-0.5 mx-1.5 rounded text-[0.85em] font-mono font-medium border border-border/40" {...props}>

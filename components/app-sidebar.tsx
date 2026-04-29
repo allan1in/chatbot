@@ -88,10 +88,9 @@ export function AppSidebar() {
                 <SidebarMenu>
                   {chats.map((item) =>
                     item.loading ? (
-                      <Skeleton
-                        key={item.id}
-                        className="h-10 w-full rounded-md animate-in fade-in duration-300 ease-out"
-                      />
+                      <div key={item.id} className="h-10 flex items-center">
+                        <Skeleton className="h-6 w-full rounded-md animate-in fade-in duration-300 ease-out" />
+                      </div>
                     ) : (
                       <SidebarMenuItem
                         key={item.id}

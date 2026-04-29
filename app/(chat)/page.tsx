@@ -5,16 +5,19 @@ import { Navbar } from "@/components/navbar";
 import { useChatList } from "../contexts/chat-list-context";
 import { useRouter } from "next/navigation";
 import { useFirstMsg } from "../contexts/first-message-context";
+import { useState } from "react";
 
 export default function New() {
   const router = useRouter();
   const { saveMsg } = useFirstMsg();
 
   const { addChat } = useChatList();
+  const [isLoading, setIsLoading] = useState(false);
 
   const id = crypto.randomUUID();
 
   const handleSend = async (inputText: string) => {
+    setIsLoading(true)
     addChat({
       id: id,
       title: "",
@@ -35,6 +38,7 @@ export default function New() {
         <Input
           className="mb-4 w-[calc(100%-2rem)] max-w-3xl"
           onSend={handleSend}
+          disabled={isLoading}
         />
       </main>
     </>
